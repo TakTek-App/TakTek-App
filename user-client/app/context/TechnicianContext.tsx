@@ -16,9 +16,11 @@ interface Technician {
   photo: string;
   location: Coords | null;
   available: boolean;
+  companyId: string;
   company: string;
   rating: number;
-  services: number[]
+  reviews: number;
+  services: number[];
 }
 
 interface TechnicianContextType {

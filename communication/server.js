@@ -11,13 +11,13 @@ io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
   // Register a peer
-  socket.on("register", async ({ id, role, firstName, lastName, address, socketId, photo, serviceName, company, rating, location, services, jobId }) => {
+  socket.on("register", async ({ id, role, firstName, lastName, address, socketId, photo, serviceId, serviceName, companyId, company, rating, reviews, location, services }) => {
     const data = { id, role, firstName, lastName, socketId, photo, location };
     if(role === "user") {
-      peers[socket.id] = { ...data, address, serviceName};
+      peers[socket.id] = { ...data, address, serviceId, serviceName};
     }
     else if(role === "technician") {
-      peers[socket.id] = { ...data, available: false, company, rating, services, jobId };
+      peers[socket.id] = { ...data, available: false, companyId, company, rating, reviews, services };
     }
     console.log(`Registered ${role}:`, socketId);
     console.log("Peers:", peers);
@@ -37,7 +37,7 @@ io.on("connection", (socket) => {
     console.log(`Offer received from ${socket.id} to ${target}`);
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
-      io.to(targetSocket).emit("offer", { offer, sender: peers[socket.id].socketId });
+      io.to(targetSocket).emit("offer", { offer, sender: peers[socket.id].socketId, senderData: peers[socket.id] });
       console.log("Offer sent to:", targetSocket);
     } else {
       console.log(`Target ${target} not found`);
@@ -48,7 +48,9 @@ io.on("connection", (socket) => {
   socket.on("call-rejected", ({ target }) => {
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
-      io.to(targetSocket).emit("call-rejected");
+      io.to(targetSocket).emit("call-rejected", {
+        senderData: peers[socket.id],
+      });
       console.log(`Call rejected by ${peers[socket.id].socketId} to ${target}`);
     }
   });
@@ -58,7 +60,10 @@ io.on("connection", (socket) => {
     console.log(`Answer received from ${socket.id} to ${target}`);
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
-      io.to(targetSocket).emit("answer", { answer });
+      io.to(targetSocket).emit("answer", {
+        answer,
+        responderData: peers[socket.id],
+      });
       console.log("Answer sent to:", targetSocket);
     } else {
       console.log(`Target ${target} not found`);
@@ -84,10 +89,24 @@ io.on("connection", (socket) => {
   
     if (targetSocket) {
       // Emit the "call-ended" event to the target peer
-      io.to(targetSocket).emit("call-ended", { target });
+      io.to(targetSocket).emit("call-ended", {
+        senderData: peers[socket.id], // Include full data of the person ending the call
+      });
       console.log(`Call ended by ${peers[socket.id].socketId} with ${target}`);
     } else {
       console.log("Target socket not found for call end.");
+    }
+  });
+
+  socket.on("call-cancelled", ({ target }) => {
+    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
+    if (targetSocket) {
+      io.to(targetSocket).emit("call-cancelled", {
+        senderData: peers[socket.id], // Include full data of the person canceling the call
+      });
+      console.log(`Call cancelled by ${peers[socket.id].socketId} with ${target}`);
+    } else {
+      console.log("Target socket not found for call cancel.");
     }
   });
 
@@ -144,16 +163,19 @@ io.on("connection", (socket) => {
       (id) => peers[id].socketId === technicianId
     );
 
+    const technicianData = peers[technicianSocket];
+
+    if (!technicianData) {
+      console.log(`Technician ${technicianId} data is not available`);
+      return;
+    }
+
     if (response === "accept") {
-      if (peers[technicianSocket]) {
-        peers[technicianSocket].available = false;
-      }
+      peers[technicianSocket].available = false;
 
       io.to(clientSocket).emit("hire-accepted", {
-        technicianId,
+        ...technicianData,
       });
-
-      io.to(technicianSocket).emit("on-job", { clientId });
 
       io.to(technicianSocket).emit(
         "peer-list",
@@ -166,7 +188,7 @@ io.on("connection", (socket) => {
       );
     } else if (response === "reject") {
       io.to(clientSocket).emit("hire-rejected", {
-        technicianId,
+        ...technicianData,
       });
 
       console.log(

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Text, View, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput, FlatList, Image } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Text, View, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput, FlatList, Image, ActivityIndicator } from "react-native";
 import * as Location from "expo-location";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from '../../../context/AuthContext';
@@ -9,15 +9,16 @@ import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BlurView } from "expo-blur";
 import { useTechnician } from "@/app/context/TechnicianContext";
+import Constants from "expo-constants";
 
-const GOOGLE_MAPS_API_KEY = '';
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 interface Service {
   id: number;
   name: string;
 }
 
-export default function Index() {
+export default function Services() {
   const { user, loading } = useAuth();
   const [services, setServices] = useState<Service[]>();
   const [city, setCity] = useState<string | null>(null);
@@ -29,6 +30,8 @@ export default function Index() {
   const router = useRouter();
   
   const { id, name } = useLocalSearchParams();
+
+  const [loadingCoords, setLoadingCoords] = useState(true);
 
   const { coords, setCoords, address, setAddress } = useCoords();
   const { technician } = useTechnician();
@@ -44,93 +47,76 @@ export default function Index() {
   };
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace("/auth/login");
-      } else {
-        // console.log("Logging user from index", user);
-      }
+    if (!loading && !user) router.replace("/auth/login");
+    if (!loading && technician) router.replace("/(tabs)/(root)/contact/map");
+  }, [user, loading, technician]);
+
+  const mapRef = useRef<MapView>(null);
+  
+  useEffect(() => {
+    if (mapRef.current && coords) {
+      mapRef.current.animateToRegion({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }, 1000);
     }
-  }, [user, loading]);
+    setLoadingCoords(false);
+  }, [mapRef.current]);
 
   useEffect(() => {
-    if (!loading) {
-      if (technician) {
-        router.replace("/(tabs)/(root)/contact/map");
-      }
-    }
-  }, [user, loading]);
-
-  useEffect(() => {
-    const fetchServices = async () => {
+    (async () => {
       try {
-        const response = await fetch(`http://10.0.2.2:3000/services/category/${id}`);
-        if (!response.ok) {
-          throw new Error(`Error: ${response.status}`);
-        }
-        const result = await response.json();
+        const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/services/category/${id}`);
+        const result = response.ok ? await response.json() : [];
         setServices(result);
-        console.log(result);
-      } catch (err: any) {
+      } catch (err) {
         setServices([
-          {
-              "id": 1,
-              "name": "Locksmith",
-          },
-          {
-            "id": 8,
-            "name": "Other",
-          },
+          { id: 1, name: "Locksmith" },
+          { id: 8, name: "Other" },
         ]);
-        // console.log(err.message);
       }
-    };
+    })();
+  }, [id]);
 
-    fetchServices();
-  }, []);
+  const searchAddress = useCallback(
+    async (query: string) => {
+      if (!query || query.length < 3) return setSearchAddressResults([]);
 
-  const searchAddress = async (query: string) => {
-    if (!query) return setSearchAddressResults([]);
-    if (query.length < 3) return;
+      try {
+        const searchQuery = `${query} ${city}, ${country}`;
+        const url = `${Constants.expoConfig?.extra?.expoPublic?.USER_SERVER}/autocomplete?query=${searchQuery}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-    try {
-      query = `${query} ${city}, ${country}`
-      const url = `http://localhost:3001/autocomplete?query=${query}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status === 'OK') {
-        setSearchAddressResults(data.predictions);
-      } else {
-        console.error('No results found:', data.status);
+        if (data.status === "OK") setSearchAddressResults(data.predictions);
+        else setSearchAddressResults([]);
+      } catch {
         setSearchAddressResults([]);
       }
-    } catch (error) {
-      console.error('Error searching address:', error);
-      setSearchAddressResults([]);
-    }
-  };
+    },
+    [city, country]
+  );
 
-  const fetchCoordinates = async (address: string) => {
+  const fetchCoordinates = useCallback(async (address: string) => {
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${GOOGLE_MAPS_API_KEY}`;
       const response = await fetch(url);
       const data = await response.json();
 
-      if (data.status === 'OK') {
-        const location = data.results[0].geometry.location;
-        setCoords(location);
-        console.log('Coordinates:', location);
+      if (data.status === "OK") {
+        setCoords(data.results[0].geometry.location);
+        setAddress(address);
       } else {
-        console.error('Geocoding error:', data.status);
+        setErrorMsg("Failed to fetch coordinates");
       }
-    } catch (error) {
-      console.error('Error fetching coordinates:', error);
+    } catch {
+      console.error("Error fetching coordinates");
     }
-  };
+  }, []);
 
   const selectAddress = (address: string) => {
-    setAddress(address);
     setSearchAddressResults([]);
     fetchCoordinates(address);
     setIsEditing(false);
@@ -147,24 +133,23 @@ export default function Index() {
   return (
     <GestureHandlerRootView style={styles.container}>
       {/* Fullscreen Map */}
-      {!address ? (
-        <Text>Loading...</Text>
+      {loadingCoords ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
       ) : (
-      <MapView
+      <MapView ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
-        initialRegion={{
-          latitude: coords?.latitude || 0,
-          longitude: coords?.longitude || 0,
+        region={{
+          latitude: coords?.latitude ?? 0,
+          longitude: coords?.longitude ?? 0,
           latitudeDelta: 0.0112,
           longitudeDelta: 0.0121,
         }}
       >
         <Marker
-          coordinate={{
-            latitude: coords?.latitude || 0,
-            longitude: coords?.longitude || 0,
-          }}
+          coordinate={coords!}
           title="Current Location"
         >
           <Image
@@ -183,15 +168,27 @@ export default function Index() {
           {errorMsg ? (
             <Text style={styles.error}>{errorMsg}</Text>
           ) : coords ? isEditing ? (
-          <TextInput
-            placeholder="Search for an address"
-            value={searchAddressQuery}
-            onChangeText={(text) => {
-              setSearchAddressQuery(text);
-              searchAddress(text);
-            }}
-            style={styles.addressInput}
-          />
+          <View style={styles.searchAddressContainer}>
+            <TextInput
+              placeholder="Search for an address"
+              value={searchAddressQuery}
+              onChangeText={(text) => {
+                setSearchAddressQuery(text);
+                searchAddress(text);
+              } }
+              style={styles.addressInput}
+            />
+            <TouchableOpacity onPress={() => {
+                  setIsEditing(false)
+                  // console.log("editing false")
+                }
+              }>
+              <Image
+              source={require('@/assets/icons/close.png')}
+              style={styles.closeAddressInput}
+            />
+            </TouchableOpacity>  
+          </View>
           ) : (
           <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.addressRow}>
             <Text style={styles.address} numberOfLines={1} ellipsizeMode="tail">{address}
@@ -233,11 +230,13 @@ export default function Index() {
                   key={service.id}
                   style={styles.serviceButton}
                 >
-                  <Image
-                    source={serviceImages[service.name.toLowerCase().replace(/\s+/g, '')]}
-                    style={styles.serviceImage}
-                  />
-                  <Text style={styles.serviceText}>{service.name}</Text>
+                  <View style={styles.serviceContent}>
+                    <Image
+                      source={serviceImages[service.name.toLowerCase().replace(/\s+/g, '')]}
+                      style={styles.serviceImage}
+                    />
+                    <Text style={styles.serviceText}>{service.name}</Text>
+                  </View>
                 </Link>
               ))}
             </>
@@ -314,7 +313,7 @@ const styles = StyleSheet.create({
   address: {
     fontSize: 16,
     textAlign: "center",
-    maxWidth: 400,
+    maxWidth: 300,
     overflow: "hidden",
   },
   changeAddress: {
@@ -322,13 +321,15 @@ const styles = StyleSheet.create({
     right: 10,
     marginTop: 10,
   },
+  searchAddressContainer: {
+    width: "100%",
+  },
   addressInput: {
     width: "100%",
     height: 33,
     borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: 10,
-    paddingLeft: 8,
     fontSize: 16,
     padding: 5,
     paddingHorizontal: 10,
@@ -336,20 +337,25 @@ const styles = StyleSheet.create({
   },
   addressSuggestions: {
     position: 'absolute',
+    width: "100%",
     top: 90,
     padding: 8,
     fontSize: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: colors.primary,
     borderRadius: 10,
-    // backgroundColor: '#fff',
+    backgroundColor: '#fff',
   },
   suggestion: {
     padding: 8,
     fontSize: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-    // backgroundColor: '#fff',
+    borderBottomColor: colors.primary,
+  },
+  closeAddressInput: {
+    position: "absolute",
+    right: 10,
+    bottom: 4,
   },
   error: {
     fontSize: 16,
@@ -367,16 +373,23 @@ const styles = StyleSheet.create({
   },
   serviceButton: {
     width: "90%",
-    padding: 15,
+    alignItems: "center", 
+    justifyContent: "center",
     marginVertical: 8,
+  },
+  serviceContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    padding: 15,
     backgroundColor: colors.primary,
     borderRadius: 50,
-    textAlign: "center"
   },
   serviceImage: {
     width: 20,
-    height: 20,
-    marginRight: 10,
+    height: 15,
   },
   serviceText: {
     color: "#fff",

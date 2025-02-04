@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, Platform, Modal } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, LatLng, Region, PROVIDER_DEFAULT } from 'react-native-maps';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
@@ -9,9 +9,10 @@ import colors from "../../../../assets/colors/theme";
 import MapViewDirections from 'react-native-maps-directions';
 import { useSocket } from "@/app/context/SocketContext";
 import { useAuth } from '@/app/context/AuthContext';
+import { MediaStream, RTCPeerConnection,RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
+import Constants from "expo-constants";
 
-const GOOGLE_MAPS_API_KEY = '';
-// const GOOGLE_MAPS_API_KEY = '';
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 interface Peer { //
   userId: string;
@@ -26,14 +27,24 @@ interface Coords {
 }
 
 const MapScreen: React.FC = () => {
-  const { technician } = useAuth();
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isCalling, setIsCalling] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ sender: string; senderData: any } | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+
+  const { technician, createCall, review } = useAuth();
   const [routeCoordinates, setRouteCoordinates] = useState<Coords[]>([]);
   const [duration, setDuration] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', message: '' });
+  const [callModalVisible, setCallModalVisible] = useState(false);
   const [rating, setRating] = useState(5);
   const router = useRouter();
 
@@ -51,6 +62,52 @@ const MapScreen: React.FC = () => {
       setPeerLocations(peers);
     });
 
+    socket?.on("offer", ({ offer, sender, senderData }) => {
+      console.log(`Incoming offer from ${sender} with data:`, senderData);
+      setIncomingCall({ sender, senderData });
+      setCallModalVisible(true);
+      handleOffer(offer, sender);
+    });
+
+    socket?.on("answer", handleAnswer);
+    socket?.on("ice-candidate", handleIceCandidate);
+    socket?.on("call-rejected", ({senderData}) => {
+      resetCallState();
+      showModal("Rejected",`${senderData.firstName} rejected the call.`)
+      setCallModalVisible(false);
+      console.log("Call rejected.");
+    });
+
+    socket?.on("call-ended", ({ senderData }) => {
+      resetCallState();
+      showModal("Ended",`${senderData.firstName} ended the call.`)
+      console.log("Call ended.");
+    });
+
+    socket?.on("call-cancelled", () => {
+      resetCallState();
+      console.log(`Call cancelled`);
+    });
+
+    const getUserMedia = async () => {
+      const constraints = { audio: true, video: false };
+      try {
+        const stream = await mediaDevices.getUserMedia(constraints);
+  
+        if (stream.getAudioTracks().length === 0) {
+          console.error("No audio tracks found.");
+          return;
+        }
+
+        setLocalStream(stream);
+        console.log("Local stream obtained.");
+      } catch (err) {
+        console.error("Failed to get user media:", err);
+      }
+    };
+
+    getUserMedia();
+
     socket?.on("service-cancelled", () => {
       showAlert("Service cancelled", `The service was cancelled`)
       console.log("Service cancelled")
@@ -64,10 +121,178 @@ const MapScreen: React.FC = () => {
 
     return () => { //
       socket?.off("peer-list");
+      socket?.off("offer");
+      socket?.off("answer");
+      socket?.off("ice-candidate");
+      socket?.off("call-rejected");
+      socket?.off("call-ended");
+      socket?.off("call-cancelled");
       socket?.off("service-cancelled");
       socket?.off("service-ended");
     };
   }, []);
+
+  useEffect(() => {
+    if (inCall && !remoteStream) {
+      console.warn("Remote stream is missing. Debugging...");
+    }
+  }, [inCall, remoteStream]);
+
+  const handleOffer = async (offer: RTCSessionDescription, sender: string) => {
+    const peerConnection = createPeerConnection(sender);
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("Offer set to remote description.");
+
+    iceCandidateQueue.current.forEach((candidate) => {
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("Queued ICE candidate added.");
+    });
+    iceCandidateQueue.current = [];
+
+    peerConnectionRef.current = peerConnection;
+  };
+
+  const handleAnswer = async (answer: { answer: RTCSessionDescription } | null) => {
+    console.log(client?.socketId)
+    if (answer && answer.answer) {
+      const { answer: sessionDescription } = answer;
+
+      console.log("Received valid answer:", sessionDescription);
+
+      if (peerConnectionRef.current) {
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          console.log("Remote description set successfully.");
+          console.log(client?.socketId)
+
+          setInCall(true);
+          setCallModalVisible(true);
+          console.log(client?.socketId)
+        } catch (error) {
+          console.error("Error setting remote description:", error);
+        }
+      }
+    } else {
+      console.error("Received invalid answer:", answer);
+    }
+  };
+
+  const handleIceCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+    console.log("Received ICE candidate:", candidate);
+    if (peerConnectionRef.current) {
+      if (peerConnectionRef.current.remoteDescription) {
+        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        iceCandidateQueue.current.push(candidate);
+        console.log("ICE candidate queued.");
+      }
+    }
+  };
+
+  const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    peerConnection.addEventListener( 'track', event => {
+      console.log("Remote stream received", event.streams[0]);
+      setRemoteStream(event.streams[0]);
+    });
+
+    peerConnection.addEventListener( 'icecandidate', event => {
+      if (event.candidate) {
+        socket?.emit("ice-candidate", { target: targetPeer, candidate: event.candidate });
+        console.log(`ICE candidate sent to: ${targetPeer}`);
+      }
+    });
+
+    return peerConnection;
+  };
+
+  const startCall = async () => {
+    if (!localStream || !client) return;
+
+    const peerConnection = createPeerConnection(client.socketId);
+
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+
+    const offerOptions = {
+      offerToReceiveAudio: 1,
+    };
+
+    try {
+      const offer = await peerConnection.createOffer(offerOptions);
+      await peerConnection.setLocalDescription(offer);
+
+      socket?.emit("offer", { target: client.socketId, offer });
+      peerConnectionRef.current = peerConnection;
+
+      setIsCalling(true);
+      setCallModalVisible(true);
+      console.log(`Calling peer: ${client}`);
+    } catch (error) {
+      console.error("Error creating or setting offer:", error);
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!incomingCall || !localStream) return;
+  
+    const peerConnection = peerConnectionRef.current!;
+  
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+  
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+  
+    socket?.emit("answer", { target: incomingCall.sender, answer });
+
+    if (technician?.id) {
+      await createCall(technician.id, incomingCall.senderData.id);
+    } else {
+      console.error("Technician ID is undefined");
+    }
+  
+    setInCall(true);
+    setCallModalVisible(true);
+    console.log(`Call accepted with ${incomingCall.sender}`);
+  };
+
+  const rejectCall = () => {
+    if (incomingCall) {
+      socket?.emit("call-rejected", { target: incomingCall.sender });
+      console.log(`Call rejected from ${incomingCall.sender}`);
+      setIncomingCall(null);
+      setCallModalVisible(false);
+    }
+  };
+
+  const endCall = () => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+
+    resetCallState();
+    socket?.emit("call-ended", { target: client?.socketId || incomingCall?.sender });
+    console.log("Call ended.");
+  };
+
+  const cancelCall = () => {
+    if (isCalling) {
+      socket?.emit("call-cancelled", { target: client?.socketId || incomingCall?.sender });
+      console.log(`Call cancelled to ${client?.socketId}`);
+      resetCallState();
+    }
+  };
+
+  const resetCallState = () => {
+    setIsCalling(false);
+    setInCall(false);
+    setCallModalVisible(false);
+    peerConnectionRef.current = null;
+    setRemoteStream(null);
+  };
 
   const cancelService = () => {
     socket?.emit("cancel-service", {
@@ -93,6 +318,11 @@ const MapScreen: React.FC = () => {
   const showAlert = (title: string, message: string) => {
     setModalContent({ title, message });
     setAlertVisible(true);
+  };
+
+  const showModal = (title: string, message: string) => {
+    setModalContent({ title, message });
+    setModalVisible(true);
   };
 
   useEffect(() => {
@@ -143,8 +373,19 @@ const MapScreen: React.FC = () => {
     showReviewModal("Order Completed", `Customer review`)
   };
 
-  const handleRate = (value: number) => {
+  const handleRate = async (value: number) => {
     setRating(value);
+  };
+
+  const submitRating = async () => {
+    if (client?.id && technician?.jobs[technician.jobs.length-1]?.id) {
+      await review(client.id, technician.jobs[technician.jobs.length-1].id, rating);
+      setReviewModalVisible(false)
+      setClient(null)
+      router.replace("/")
+    } else {
+      console.error("Client ID or Job ID is undefined");
+    }
   };
 
   const simpleMapStyle = [
@@ -225,7 +466,7 @@ const MapScreen: React.FC = () => {
             latitude: client?.location?.latitude ?? 0,
             longitude: client?.location?.longitude ?? 0
           }}
-          apikey={GOOGLE_MAPS_API_KEY}
+          apikey={GOOGLE_MAPS_API_KEY || ''}
           strokeWidth={4}
           strokeColor={colors.primary}
         />
@@ -244,10 +485,11 @@ const MapScreen: React.FC = () => {
               <Text style={styles.clientName}>{client?.firstName} {client?.lastName}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.callButton}>
+        <TouchableOpacity style={styles.callButton} onPress={startCall}>
           <Image source={require("../../../../assets/icons/phone.png")} style={styles.buttonIcon} />
           <Text style={styles.buttonText}>Call {client?.firstName}</Text>
-        </TouchableOpacity><TouchableOpacity style={styles.dashboardButton} onPress={openDashboard}>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.dashboardButton} onPress={openDashboard}>
             <Image source={require("../../../../assets/icons/dashboard.png")} style={styles.buttonIcon} />
             <Text style={styles.dashboardButtonText}>Switch to Dashboard</Text>
           </TouchableOpacity>
@@ -299,12 +541,10 @@ const MapScreen: React.FC = () => {
                 <TouchableOpacity
                     style={styles.modalButton}
                     onPress={() => {
-                      setReviewModalVisible(false)
-                      setClient(null)
-                      router.replace("/")
+                      submitRating()
                     }}
                 >
-                  <Text style={styles.modalButtonText}>Close</Text>
+                  <Text style={styles.modalButtonText}>Submit</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -328,6 +568,77 @@ const MapScreen: React.FC = () => {
               >
                   <Text style={styles.modalButtonText}>Close</Text>
               </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={alertVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalContent.title}</Text>
+              <Text style={styles.modalMessage}>{modalContent.message}</Text>
+              <TouchableOpacity
+                  style={styles.modalButton}
+                  onPress={() => {
+                    setModalVisible(false)
+                  }}
+              >
+                  <Text style={styles.modalButtonText}>Close</Text>
+              </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal for Calls */}
+      <Modal visible={callModalVisible} transparent={true} animationType="slide">
+        <View style={styles.callModalContainer}>
+          <View style={styles.callModalContent}>
+            {isCalling && !inCall && !incomingCall && (
+              <>
+              <Text style={styles.callModalText}>Calling {client?.firstName}</Text>
+              <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
+              <TouchableOpacity style={styles.callModalButton} onPress={cancelCall}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              </>
+            )}
+            {inCall && !incomingCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {client?.firstName}</Text>
+                <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && inCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {incomingCall.senderData.firstName }</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && !inCall && (
+              <>
+                <Text style={styles.callModalText}>Incoming call from {incomingCall.senderData.firstName}</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <View style={{ flexDirection: "row", gap: 50 }}>
+                  <TouchableOpacity style={styles.callModalButton} onPress={acceptCall}>
+                    <Text style={styles.buttonText}>Accept Call</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.callModalButton} onPress={rejectCall}>
+                    <Text style={styles.buttonText}>Reject Call</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -570,6 +881,34 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  callModalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  callModalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    width: "90%",
+  },
+  callModalText: {
+    fontSize: 25,
+  },
+  callModalButton: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    marginVertical: 5,
+    borderRadius: 5,
+  },
+  callPhoto: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginVertical: 80,
   },
 });
 

@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { AuthProvider } from "./context/AuthContext";
 import { CoordsProvider } from "./context/CoordsContext";
 import { ClientProvider } from "./context/ClientContext";
+// import { startBackgroundLocationTracking } from './utils/backgroundLocation';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
@@ -10,6 +11,10 @@ export default function RootLayout() {
   useEffect(() => {
     setIsReady(true);
   }, []);
+
+  // useEffect(() => {
+  //   startBackgroundLocationTracking();
+  // }, []);
 
   if (!isReady) return null;
 

@@ -1,14 +1,15 @@
 import { useAuth } from '@/app/context/AuthContext';
-import React, { useEffect, useState } from 'react';
-import { View, Text, Image, Button, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, Image, Switch, TouchableOpacity, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import colors from "../../../assets/colors/theme";
 import * as Location from "expo-location";
 import { useRouter } from 'expo-router';
-import SwitchToggle from 'react-native-switch-toggle';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSocket } from '@/app/context/SocketContext';
 import { useClient } from '@/app/context/ClientContext';
 import { useCoords } from '@/app/context/CoordsContext';
+import { Audio } from 'expo-av';
+import { MediaStream, RTCPeerConnection,RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
 
 interface Coords {
   latitude: number;
@@ -24,16 +25,30 @@ interface Client {
   photo: string;
   address: string;
   location: Coords | null;
+  serviceId: number;
   serviceName: string;
 }
 
 const Main = () => {
-  const { technician, loading } = useAuth();
+  const [locationPermission, setLocationPermission] = useState(false);
+  const [microphonePermission, setMicrophonePermission] = useState(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isCalling, setIsCalling] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ sender: string; senderData: any } | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+
+  const { technician, loading, acceptJob, fetchTechnicianInfo, createCall, review } = useAuth();
+  const [connecting, setConnecting] = useState(true);
   const [available, setAvailable] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [noServicesVisible, setNoServicesVisible] = useState(false);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', message: '' });
+  const [callModalVisible, setCallModalVisible] = useState(false);
   const [clients, setClients] = useState<Client[]>([]); //
   const [requestingClient, setRequestingClient] = useState<Client>();
   const [rating, setRating] = useState(5);
@@ -41,52 +56,34 @@ const Main = () => {
   const {client, setClient} = useClient();
   const { setCoords } = useCoords();
 
-  const { socket } = useSocket();
-  const socketPeer = {
-    id: technician?.id,
-    role: "technician",
-    firstName: technician?.firstName,
-    lastName: technician?.lastName,
-    socketId: technician?.email,
-    photo: technician?.photo,
-    available: false,
-    company: technician?.company.name,
-    rating: technician?.rating,
-    services: technician?.services.map((service) => service.id)
-  }
-  const currentOrder = {
-    address: '123 Main St',
-    serviceType: 'Plumbing',
-    clientName: 'John Doe',
-    clientPhoto: 'https://plus.unsplash.com/premium_photo-1689530775582-83b8abdb5020?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  }
-  // const currentOrder = null
+  const { socket, isConnected } = useSocket();
+
   const router = useRouter();
 
   // Random location generator
 
-  const baseLocation = { latitude: 6.207326920022623, longitude: -75.57076466673648 };
+  // const baseLocation = { latitude: 6.207326920022623, longitude: -75.57076466673648 };
 
-  const generateRandomLocation = () => {
-    const radiusInKm = 1;
-    const earthRadiusInKm = 6371;
+  // const generateRandomLocation = () => {
+  //   const radiusInKm = 1;
+  //   const earthRadiusInKm = 6371;
 
-    const randomOffset = () => (Math.random() - 0.5) * 2; // Random value between -1 and 1
+  //   const randomOffset = () => (Math.random() - 0.5) * 2; // Random value between -1 and 1
 
-    const latOffset = (radiusInKm / earthRadiusInKm) * (180 / Math.PI);
-    const lngOffset = latOffset / Math.cos((baseLocation.latitude * Math.PI) / 180);
+  //   const latOffset = (radiusInKm / earthRadiusInKm) * (180 / Math.PI);
+  //   const lngOffset = latOffset / Math.cos((baseLocation.latitude * Math.PI) / 180);
 
-    const newLat = baseLocation.latitude + randomOffset() * latOffset;
-    const newLng = baseLocation.longitude + randomOffset() * lngOffset;
+  //   const newLat = baseLocation.latitude + randomOffset() * latOffset;
+  //   const newLng = baseLocation.longitude + randomOffset() * lngOffset;
 
-    return { latitude: parseFloat(newLat.toFixed(6)), longitude: parseFloat(newLng.toFixed(6)) };
-  };
+  //   return { latitude: parseFloat(newLat.toFixed(6)), longitude: parseFloat(newLng.toFixed(6)) };
+  // };
 
-  const sendRandomLocation = () => {
-    const randomLocation = generateRandomLocation();
-    setCoords(randomLocation);
-    socket?.emit("send-location", randomLocation);
-  };
+  // const sendRandomLocation = () => {
+  //   const randomLocation = generateRandomLocation();
+  //   setCoords(randomLocation);
+  //   socket?.emit("send-location", randomLocation);
+  // };
 
   // /Random location generator
 
@@ -94,6 +91,37 @@ const Main = () => {
     setModalContent({ title, message });
     setModalVisible(true);
   };
+
+  const showNoServices = (title: string, message: string) => {
+    setModalContent({ title, message });
+    setNoServicesVisible(true);
+  };
+
+  useEffect(() => {
+    const requestPermissions = async () => {
+      try {
+        const locationStatus = await Location.requestForegroundPermissionsAsync();
+        if (locationStatus.status === 'granted') {
+          setLocationPermission(true);
+        } else {
+          setLocationPermission(false);
+          Alert.alert('Permission Denied', 'Location access is required.');
+        }
+
+        const microphoneStatus = await Audio.requestPermissionsAsync();
+        if (microphoneStatus.status === 'granted') {
+          setMicrophonePermission(true);
+        } else {
+          setMicrophonePermission(false);
+          Alert.alert('Permission Denied', 'Microphone access is required.');
+        }
+      } catch (error) {
+        console.error("Error requesting permissions:", error);
+      }
+    };
+
+    requestPermissions();
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -105,49 +133,128 @@ const Main = () => {
     }
   }, [technician, loading]);
 
-  // useEffect(() => {
-  //   const requestPermissions = async () => {
-  //     const { status } = await Location.requestForegroundPermissionsAsync();
-  //     if (status !== 'granted') {
-  //       console.log('Permission to access location was denied');
-  //       return false;
-  //     }
-  //     return true;
-  //   };
+  const socketPeer = {
+    id: technician?.id,
+    role: "technician",
+    firstName: technician?.firstName,
+    lastName: technician?.lastName,
+    socketId: technician?.email,
+    photo: technician?.photo,
+    companyId: technician?.company.id,
+    company: technician?.company.name,
+    rating: technician?.rating,
+    reviews: technician?.reviews.length,
+    services: technician?.services.map((service) => service.id)
+  }
 
-  //   const startLocationTracking = async () => {
-  //     const hasPermission = await requestPermissions();
-  //     if (!hasPermission) return;
+  useEffect(() => {
+    const fetchData = async () => {
+      if (technician?.id) {
+        await fetchTechnicianInfo(technician.id);
+      }
+    };
+
+    fetchData();
+  }, [technician?.id]);
+
+  useEffect(() => {
+    const requestPermissions = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Permission to access location was denied');
+        return false;
+      }
+      return true;
+    };
+
+    const startLocationTracking = async () => {
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) return;
     
-  //     Location.watchPositionAsync(
-  //       {
-  //         accuracy: Location.Accuracy.High,
-  //         timeInterval: 5000, // Update every 5 seconds
-  //         distanceInterval: 10, // Update every 10 meters
-  //       },
-  //       (location) => {
-  //         const { latitude, longitude } = location.coords;
-  //         socket?.emit('send-location', { latitude, longitude });
-  //         console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
-  //       }
-  //     );
-  //   };
+      Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000,
+          distanceInterval: 10,
+        },
+        (location) => {
+          const { latitude, longitude } = location.coords;
+          socket?.emit('send-location', { latitude, longitude });
+          // console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
+        }
+      );
+    };
 
-  //   startLocationTracking();
-  // }, []);
+    startLocationTracking();
+  }, []);
 
   useEffect(() => { //
-    if (!socket) return;
+    if (!socket || !isConnected) return;
+
+    setConnecting(false);
+
     socket?.emit("register", socketPeer);
     console.log("Registered as technician:", socketPeer.socketId);
 
-    sendRandomLocation();
-    const interval = setInterval(sendRandomLocation, 3000);
+    console.log("Services:", socketPeer.services);
+
+    if (socketPeer.services?.length === 0) {
+      showNoServices("No services", "You need to add services to start receiving orders.");
+    }
+
+    // sendRandomLocation();
+    // const interval = setInterval(sendRandomLocation, 3000);
 
     socket?.on("peer-list", (clients: Client[]) => { //
       setClients(clients);
       console.log("clients", clients)
     });
+
+    socket?.on("offer", ({ offer, sender, senderData }) => {
+      console.log(`Incoming offer from ${sender} with data:`, senderData);
+      setIncomingCall({ sender, senderData });
+      setCallModalVisible(true);
+      handleOffer(offer, sender);
+    });
+
+    socket?.on("answer", handleAnswer);
+    socket?.on("ice-candidate", handleIceCandidate);
+    socket?.on("call-rejected", ({senderData}) => {
+      resetCallState();
+      showModal("Rejected",`${senderData.firstName} rejected the call.`)
+      setCallModalVisible(false);
+      console.log("Call rejected.");
+    });
+
+    socket?.on("call-ended", ({ senderData }) => {
+      resetCallState();
+      showModal("Ended",`${senderData.firstName} ended the call.`)
+      console.log("Call ended.");
+    });
+
+    socket?.on("call-cancelled", () => {
+      resetCallState();
+      console.log(`Call cancelled`);
+    });
+
+    const getUserMedia = async () => {
+      const constraints = { audio: true, video: false };
+      try {
+        const stream = await mediaDevices.getUserMedia(constraints);
+  
+        if (stream.getAudioTracks().length === 0) {
+          console.error("No audio tracks found.");
+          return;
+        }
+
+        setLocalStream(stream);
+        console.log("Local stream obtained.");
+      } catch (err) {
+        console.error("Failed to get user media:", err);
+      }
+    };
+
+    getUserMedia();
 
     socket?.on("hire-request", (clientData) => {
       setRequestingClient(clientData);
@@ -167,22 +274,191 @@ const Main = () => {
     });
 
     return () => {
+      socket?.off("peer-list");
+      socket?.off("offer");
+      socket?.off("answer");
+      socket?.off("ice-candidate");
+      socket?.off("call-rejected");
+      socket?.off("call-ended");
+      socket?.off("call-cancelled");
       socket?.off("hire-request");
       socket?.off("service-cancelled");
       socket?.off("service-ended");
-      clearInterval(interval);
+      // clearInterval(interval);
       socket?.disconnect();
     };
-  }, [technician]);
+  }, [socket, isConnected]);
 
-  const toggleAvailability = () => {
+  useEffect(() => {
+    if (inCall && !remoteStream) {
+      console.warn("Remote stream is missing. Debugging...");
+    }
+  }, [inCall, remoteStream]);
+
+  const handleOffer = async (offer: RTCSessionDescription, sender: string) => {
+    const peerConnection = createPeerConnection(sender);
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("Offer set to remote description.");
+
+    iceCandidateQueue.current.forEach((candidate) => {
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("Queued ICE candidate added.");
+    });
+    iceCandidateQueue.current = [];
+
+    peerConnectionRef.current = peerConnection;
+  };
+
+  const handleAnswer = async (answer: { answer: RTCSessionDescription } | null) => {
+    console.log(client?.socketId)
+    if (answer && answer.answer) {
+      const { answer: sessionDescription } = answer;
+
+      console.log("Received valid answer:", sessionDescription);
+
+      if (peerConnectionRef.current) {
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          console.log("Remote description set successfully.");
+          console.log(client?.socketId)
+
+          setInCall(true);
+          setCallModalVisible(true);
+          console.log(client?.socketId)
+        } catch (error) {
+          console.error("Error setting remote description:", error);
+        }
+      }
+    } else {
+      console.error("Received invalid answer:", answer);
+    }
+  };
+
+  const handleIceCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+    console.log("Received ICE candidate:", candidate);
+    if (peerConnectionRef.current) {
+      if (peerConnectionRef.current.remoteDescription) {
+        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        iceCandidateQueue.current.push(candidate);
+        console.log("ICE candidate queued.");
+      }
+    }
+  };
+
+  const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    peerConnection.addEventListener( 'track', event => {
+      console.log("Remote stream received", event.streams[0]);
+      setRemoteStream(event.streams[0]);
+    });
+
+    peerConnection.addEventListener( 'icecandidate', event => {
+      if (event.candidate) {
+        socket?.emit("ice-candidate", { target: targetPeer, candidate: event.candidate });
+        console.log(`ICE candidate sent to: ${targetPeer}`);
+      }
+    });
+
+    return peerConnection;
+  };
+
+  const startCall = async () => {
+    if (!localStream || !client) return;
+
+    const peerConnection = createPeerConnection(client.socketId);
+
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+
+    const offerOptions = {
+      offerToReceiveAudio: 1,
+    };
+
+    try {
+      const offer = await peerConnection.createOffer(offerOptions);
+      await peerConnection.setLocalDescription(offer);
+
+      socket?.emit("offer", { target: client.socketId, offer });
+      peerConnectionRef.current = peerConnection;
+
+      setIsCalling(true);
+      setCallModalVisible(true);
+      console.log(`Calling peer: ${client}`);
+    } catch (error) {
+      console.error("Error creating or setting offer:", error);
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!incomingCall || !localStream) return;
+  
+    const peerConnection = peerConnectionRef.current!;
+  
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+  
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+  
+    socket?.emit("answer", { target: incomingCall.sender, answer });
+
+    if (technician?.id) {
+      await createCall(technician.id, incomingCall.senderData.id);
+    } else {
+      console.error("Technician ID is undefined");
+    }
+  
+    setInCall(true);
+    setCallModalVisible(true);
+    console.log(`Call accepted with ${incomingCall.sender}`);
+  };
+
+  const rejectCall = () => {
+    if (incomingCall) {
+      socket?.emit("call-rejected", { target: incomingCall.sender });
+      console.log(`Call rejected from ${incomingCall.sender}`);
+      setIncomingCall(null);
+      setCallModalVisible(false);
+    }
+  };
+
+  const endCall = () => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+
+    resetCallState();
+    socket?.emit("call-ended", { target: client?.socketId || incomingCall?.sender });
+    console.log("Call ended.");
+  };
+
+  const cancelCall = () => {
+    if (isCalling) {
+      socket?.emit("call-cancelled", { target: client?.socketId || incomingCall?.sender });
+      console.log(`Call cancelled to ${client?.socketId}`);
+      resetCallState();
+    }
+  };
+
+  const resetCallState = () => {
+    setIsCalling(false);
+    setInCall(false);
+    setCallModalVisible(false);
+    peerConnectionRef.current = null;
+    setRemoteStream(null);
+  };
+
+  const toggleAvailability = async () => {
     if (!client) {
       setAvailable(!available);
       socket?.emit("toggle-availability", !available);
     }
   };
 
-  const acceptRequest = () => {
+  const acceptRequest = async () => {
     setAlertVisible(false);
     socket?.emit("hire-response", {
       response: "accept",
@@ -191,6 +467,16 @@ const Main = () => {
     });
     if (requestingClient) {
       setClient(requestingClient);
+    }
+    if (socketPeer.id) {
+      if (socketPeer.id && requestingClient?.id && requestingClient?.serviceId) {
+        const job = await acceptJob(socketPeer.id, requestingClient.id, requestingClient.serviceId);
+        console.log("job", job)
+      } else {
+        console.error("Failed to set up job: Missing required IDs", socketPeer.id, requestingClient?.id, requestingClient?.serviceId);
+      }
+    } else {
+      console.log("Failed to set up job")
     }
   }
 
@@ -205,6 +491,17 @@ const Main = () => {
 
   const handleRate = (value: number) => {
     setRating(value);
+  };
+
+  const submitRating = async () => {
+    if (client?.id && technician?.jobs[technician.jobs.length-1]?.id) {
+      await review(client.id, technician.jobs[technician.jobs.length-1].id, rating);
+      setReviewModalVisible(false)
+      setClient(null)
+      router.replace("/")
+    } else {
+      console.error("Client ID or Job ID is undefined");
+    }
   };
 
   const showReviewModal = (title: string, message: string) => {
@@ -237,16 +534,14 @@ const Main = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Available for work?</Text>
         <View style={styles.availableContainer}>
-          <SwitchToggle
-            switchOn={available}
-            onPress={toggleAvailability}
-            circleColorOff="#fff"
-            circleColorOn="#fff"
-            backgroundColorOn={colors.accentGreen}
-            backgroundColorOff={colors.red}
-            containerStyle={styles.toggleContainer}
-            circleStyle={styles.toggleCircle}
-          />
+          <Switch
+          style={{ transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }] }}
+          trackColor={{false: colors.red, true: colors.accentGreen}}
+          thumbColor={"#fff"}
+          ios_backgroundColor="#3e3e3e"
+          onValueChange={toggleAvailability}
+          value={available}
+        />
           
         <Text style={styles.available}>{available ? 'Available' : 'Busy'}</Text>
         </View>
@@ -336,6 +631,29 @@ const Main = () => {
       </Modal>
 
       <Modal
+        visible={noServicesVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoServicesVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>{modalContent.title}</Text>
+                <Text style={styles.modalMessage}>{modalContent.message}</Text>
+                <TouchableOpacity
+                    style={styles.modalButton}
+                    onPress={() => {
+                      setNoServicesVisible(false)
+                      router.replace("/(tabs)/profile")
+                    }}
+                >
+                    <Text style={styles.modalButtonText}>Go to profile</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={reviewModalVisible}
         transparent
         animationType="fade"
@@ -371,15 +689,68 @@ const Main = () => {
                 <TouchableOpacity
                     style={styles.modalButton}
                     onPress={() => {
-                      setReviewModalVisible(false)
-                      setClient(null)
-                      router.replace("/")
+                      submitRating()
                     }}
                 >
-                  <Text style={styles.modalButtonText}>Close</Text>
+                  <Text style={styles.modalButtonText}>Submit</Text>
                 </TouchableOpacity>
             </View>
         </View>
+      </Modal>
+
+      {/* Modal for Calls */}
+      <Modal visible={callModalVisible} transparent={true} animationType="slide">
+        <View style={styles.callModalContainer}>
+          <View style={styles.callModalContent}>
+            {isCalling && !inCall && !incomingCall && (
+              <>
+              <Text style={styles.callModalText}>Calling {client?.firstName}</Text>
+              <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
+              <TouchableOpacity style={styles.callModalButton} onPress={cancelCall}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              </>
+            )}
+            {inCall && !incomingCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {client?.firstName}</Text>
+                <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && inCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {incomingCall.senderData.firstName }</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && !inCall && (
+              <>
+                <Text style={styles.callModalText}>Incoming call from {incomingCall.senderData.firstName}</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <View style={{ flexDirection: "row", gap: 50 }}>
+                  <TouchableOpacity style={styles.callModalButton} onPress={acceptCall}>
+                    <Text style={styles.buttonText}>Accept Call</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.callModalButton} onPress={rejectCall}>
+                    <Text style={styles.buttonText}>Reject Call</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={connecting} transparent animationType="fade">
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={"#fff"} />
+      </View>
       </Modal>
     </ScrollView>
   );
@@ -388,6 +759,12 @@ const Main = () => {
 export default Main
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
   container: {
     flex: 1,
     backgroundColor: "#fff",
@@ -612,5 +989,33 @@ const styles = StyleSheet.create({
   },
   staro: {
     tintColor: "#969696"
+  },
+  callModalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  callModalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    width: "90%",
+  },
+  callModalText: {
+    fontSize: 25,
+  },
+  callModalButton: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    marginVertical: 5,
+    borderRadius: 5,
+  },
+  callPhoto: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginVertical: 80,
   },
 });

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
 
 interface Service {
   id: number;
@@ -51,6 +52,7 @@ interface Review {
   description: string;
   rating: number;
   technicianId: number;
+  jobId: number;
 }
 
 interface Job {
@@ -63,6 +65,7 @@ interface Job {
   user: User;
   technician: Technician;
   service: Service;
+  technicianReview: Review;
 }
 
 interface Call {
@@ -92,6 +95,9 @@ interface AuthContextType {
   signInUser: (email: string, password: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => Promise<void>;
   logOutUser: () => Promise<void>;
+  fetchUserInfo: (userId: number) => Promise<Job | null>;
+  createCall: (userId: number, technicianId: number) => Promise<void>;
+  review: (technicianId: number, jobId: number, rating: number) => Promise<void>;
   setStorageKey: (key: string, value: string | null) => Promise<void>;
 }
 
@@ -149,7 +155,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUpUser = async (firstName: string, lastName: string, email: string, phone: string, password: string) => {
     try {
-      const response = await fetch("http://10.0.2.2:3000/users", {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -174,7 +180,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInUser = async (email: string, password: string) => {
     try {
-      const response = await fetch("http://10.0.2.2:3000/users/login", {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -199,7 +205,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
 
     try {
-      const response = await fetch(`http://10.0.2.2:3000/users/${user.id}`, {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${user.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -226,6 +232,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await setStorageItem("auth_user", null);
   };
 
+  const fetchUserInfo = async (userId: number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${userId}`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+          throw new Error("Failed to fetch user information");
+      }
+
+      const user = await response.json();
+      setUser(user);
+      const latestJob = user.jobs?.[user.jobs.length - 1];
+
+      if (latestJob) {
+        console.log("User's latest job:", latestJob);
+        return latestJob;
+      } else {
+        console.warn("User has no jobs");
+        return null;
+      }
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+      throw error;
+    }
+  };
+
+  const createCall = async (userId: number, technicianId: number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/create-call`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, technicianId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create a call");
+      }
+
+      console.log("Call created successfully");
+      const user = await response.json();
+      setUser(user);
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+      throw error;
+    }
+  };
+
+  const review = async (technicianId: number, jobId: number, rating: number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ technicianId, jobId, rating }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to review");
+      }
+
+      const data = await response.json();
+      console.log("Review submitted successfully:", data);
+    } catch (error) {
+      console.error("Error creating a review", error);
+      throw error;
+    }
+  };
+
   const setStorageKey = async (key: string, value: string | null) => {
     await setStorageItem(key, value);
   };
@@ -239,6 +320,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signInUser,
         updateUser,
         logOutUser,
+        fetchUserInfo,
+        createCall,
+        review,
         setStorageKey,
       }}
     >

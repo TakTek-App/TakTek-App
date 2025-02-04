@@ -11,51 +11,8 @@ import colors from '../../assets/colors/theme';
 import { Link } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 
-// const orders: any[] = [];
-// const orders = [
-//   {
-//       id: '1',
-//       date: '2025-01-16',
-//       rating: 4.5,
-//       address: '123 Main St, City, Country',
-//       specialistName: 'John Doe',
-//       specialistPhoto: require('../../assets/images/logo.png'),
-//       serviceType: 'Plumbing',
-//       company: 'Fast Plumbing Services',
-//   },
-//   {
-//       id: '2',
-//       date: '2025-01-10',
-//       rating: 3.8,
-//       address: '456 Elm St, City, Country',
-//       specialistName: 'Jane Smith',
-//       specialistPhoto: require('../../assets/images/logo.png'),
-//       serviceType: 'Locksmith',
-//       company: 'Secure Locks Inc.',
-//   },
-//   {
-//       id: '3',
-//       date: '2025-01-05',
-//       rating: 4.0,
-//       address: '789 Oak St, City, Country',
-//       specialistName: 'Robert Brown',
-//       specialistPhoto: require('../../assets/images/logo.png'),
-//       serviceType: 'Electrical',
-//       company: 'Bright Electricians',
-//   },
-//   {
-//       id: '4',
-//       date: '2025-01-02',
-//       rating: 5.0,
-//       address: '101 Pine St, City, Country',
-//       specialistName: 'Emily Green',
-//       specialistPhoto: require('../../assets/images/logo.png'),
-//       serviceType: 'HVAC',
-//       company: 'Cool Air Solutions',
-//   },
-// ];
-
 const renderStars = (rating: number) => {
+    if(!rating) return;
     const fullStars = Math.floor(rating);
     const stars = [];
 
@@ -80,36 +37,28 @@ const renderStars = (rating: number) => {
 
 const OrdersScreen = () => {
     const { technician } = useAuth();
-    const [ photo, setPhoto ] = useState(require('../../assets/images/Default_pfp.jpg'))
+    const [photo, setPhoto] = useState({ uri: technician?.photo || '' });
     const orders = technician?.jobs || [];
-
-    const isValidUrl = (url: string) => {
-        try {
-            new URL(url);
-            return true;
-        } catch (e) {
-            return false;
-        }
-    };
-
-    useEffect(() => {
-        if (technician?.photo && isValidUrl(technician.photo)) {
-            setPhoto({ uri: technician.photo });
-        } else {
-            setPhoto(require('../../assets/images/Default_pfp.jpg'));
-        }
-    }, [technician]);
 
     const renderItem = ({ item }: { item: typeof orders[0] }) => (
         <View style={styles.orderCard} key={item.id}>
             <View style={styles.orderHeader}>
                 <View style={styles.headerSection}>
                     <Text style={styles.label}>Date</Text>
-                    <Text style={styles.orderDate}>{item.date}</Text>
+                    <Text style={styles.orderDate}>
+                        {new Date(item.date).toLocaleString('en-us', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: 'numeric',
+                            hour12: false,
+                        })}
+                    </Text>
                 </View>
                 <View style={styles.headerSection}>
                     <Text style={styles.label}>Rating</Text>
-                    {renderStars(item.technician.rating)}
+                    {renderStars(item.technicianReview?.rating)}
                 </View>
             </View>
             <View style={styles.orderBody}>
@@ -121,7 +70,9 @@ const OrdersScreen = () => {
                 <View style={styles.specialistContainer}>
                     <Image source={{ uri: item.user.photo }} style={styles.specialistPhoto} />
                     <View style={styles.specialistInfo}>
-                        <Text style={styles.specialistName}>{item.user.firstName} {item.user.lastName}</Text>
+                        <Text style={styles.specialistName}>
+                            {item.user.firstName} {item.user.lastName}
+                        </Text>
                     </View>
                 </View>
             </View>
@@ -133,10 +84,7 @@ const OrdersScreen = () => {
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Orders</Text>
                 <Link href="/(tabs)/profile" style={styles.headerLink}>
-                  <Image
-                  source={photo}
-                  style={styles.profileImage}
-                  />
+                    <Image source={photo} style={styles.profileImage} />
                 </Link>
             </View>
             {orders.length === 0 ? (
@@ -145,7 +93,7 @@ const OrdersScreen = () => {
                 </View>
             ) : (
                 <ScrollView contentContainerStyle={styles.ordersList}>
-                    {orders.map((order) => renderItem({ item: order }))}
+                    {orders.slice().reverse().map((order) => renderItem({ item: order }))}
                 </ScrollView>
             )}
         </SafeAreaView>
@@ -161,25 +109,25 @@ const styles = StyleSheet.create({
         width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: "center",
+        justifyContent: 'center',
         padding: 15,
         borderBottomColor: colors.border,
         borderBottomWidth: 1,
     },
     headerTitle: {
-      fontSize: 26,
-      fontWeight: 500,
+        fontSize: 26,
+        fontWeight: 500,
     },
     headerLink: {
-      position: "absolute",
-      right: 15,
+        position: 'absolute',
+        right: 15,
     },
     profileImage: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      borderWidth: 2,
-      borderColor: "#fff",
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 2,
+        borderColor: '#fff',
     },
     noOrdersContainer: {
         flex: 1,

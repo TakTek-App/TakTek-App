@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SafeAreaView, TextInput, Text, StyleSheet, TouchableOpacity, View, Image, Modal } from 'react-native';
+import { SafeAreaView, TextInput, Text, StyleSheet, TouchableOpacity, View, Image, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import colors from "../../assets/colors/theme";
 import { Ionicons } from '@expo/vector-icons';
@@ -27,31 +27,34 @@ const ForgotPasswordScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={colors.primary} />
-                </TouchableOpacity>
-            </View>
-            <View style={styles.main}>
-                <Image source={require("../../assets/images/logo.png")} style={styles.logo} />
-                <Text style={styles.technician}>For Technicians</Text>
-                <Text style={styles.title}>Forgot Password?</Text>
-                <Text style={styles.description}>
-                    We will send a password reset link to your email address.
-                </Text>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter your email"
-                    placeholderTextColor="#aaa"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                />
-                <TouchableOpacity style={styles.button} onPress={handleForgotPassword}>
-                    <Text style={styles.buttonText}>Send</Text>
-                </TouchableOpacity>
-            </View>
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={24} color={colors.primary} />
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.main}>
+                    <Image source={require("../../assets/images/logo.png")} style={styles.logo} />
+                    <Text style={styles.technician}>For Technicians</Text>
+                    <Text style={styles.title}>Forgot Password?</Text>
+                    <Text style={styles.description}>
+                        We will send a password reset link to your email address.
+                    </Text>
+                    <Text style={styles.label}>Email</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter your email"
+                        placeholderTextColor="#aaa"
+                        value={email}
+                        onChangeText={setEmail}
+                        keyboardType="email-address"
+                    />
+                    <TouchableOpacity style={styles.button} onPress={handleForgotPassword}>
+                        <Text style={styles.buttonText}>Send</Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+
             {/* Modal for alerts */}
             <Modal
                 visible={modalVisible}
@@ -81,6 +84,10 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
+    scrollContainer: {
+        flexGrow: 1,
+        alignItems: 'center',
+    },
     header: {
         width: "100%",
         borderBottomColor: "#eee",
@@ -105,17 +112,19 @@ const styles = StyleSheet.create({
         flex: 1,
         width: "100%",
         alignItems: 'center',
+        paddingBottom: 20,
     },
     logo: {
         width: "70%",
-        marginTop: 90,
+        height: "40%",
+        resizeMode: 'contain',
+        marginTop: 20,
     },
     technician: {
         color: colors.text,
         fontSize: 16,
         fontWeight: 500,
-        marginBottom: 90,
-        paddingLeft: 40
+        marginBottom: 20,
     },
     title: {
         width: "90%",

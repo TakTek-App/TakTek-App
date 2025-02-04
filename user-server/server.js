@@ -5,7 +5,7 @@ const app = express();
 
 app.use(cors());
 
-const apiKey = 'AIzaSyB-co4ZJTR6I3q6X7typp4D5i6mkGbAujc';
+const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
 app.get('/autocomplete', async (req, res) => {
   const { query } = req.query;

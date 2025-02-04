@@ -25,18 +25,38 @@ const RegisterScreen = () => {
     };
 
     const handleRegister = async () => {
+        if (!firstName || !/^[A-Za-z]+$/.test(firstName)) {
+            showModal('Error', 'First name is required and should only contain letters.');
+            return;
+        }
+    
+        if (!lastName || !/^[A-Za-z]+$/.test(lastName)) {
+            showModal('Error', 'Last name is required and should only contain letters.');
+            return;
+        }
+    
+        if (!email || !/\S+@\S+\.\S+/.test(email)) {
+            showModal('Error', 'Please enter a valid email address.');
+            return;
+        }
+    
+        if (!phone || !/^\d{10}$/.test(phone)) {
+            showModal('Error', 'Please enter a valid 10-digit phone number.');
+            return;
+        }
+    
+        if (!password || password.length < 8 || !/(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*])/.test(password)) {
+            showModal('Error', 'Password must be at least 8 characters long, with a mix of letters, numbers, and symbols.');
+            return;
+        }
+    
         if (password !== confirmPassword) {
             showModal('Error', 'Passwords do not match!');
             return;
         }
-
-        if (!firstName || !lastName || !phone || !email || !password) {
-            showModal('Error', 'All fields are required!');
-            return;
-        }
-
+    
         setLoading(true);
-
+    
         try {
             await signUpUser(firstName, lastName, email, phone, password);
             showModal('Verify your Email', 'We have sent an email with a verification link to your email.');
@@ -151,34 +171,34 @@ const RegisterScreen = () => {
                         )}
                     </TouchableOpacity>
                 </View>
-            </ScrollView>
 
-            <View style={styles.footer}>
-                <Text style={styles.footerText}>Already have an account?
-                    <Link href="/auth/login" style={styles.footerLink}> Sign In here</Link>
-                </Text>
-            </View>
-
-            {/* Modal for alerts */}
-            <Modal
-                visible={modalVisible}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setModalVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                        <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                        <TouchableOpacity
-                            style={styles.modalButton}
-                            onPress={() => setModalVisible(false)}
-                        >
-                            <Text style={styles.modalButtonText}>Close</Text>
-                        </TouchableOpacity>
-                    </View>
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Already have an account?
+                        <Link href="/auth/login" style={styles.footerLink}> Sign In here</Link>
+                    </Text>
                 </View>
-            </Modal>
+
+                {/* Modal for alerts */}
+                <Modal
+                    visible={modalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setModalVisible(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+                            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+                            <TouchableOpacity
+                                style={styles.modalButton}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text style={styles.modalButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
+            </ScrollView>
         </SafeAreaView>
     );
 };
@@ -202,7 +222,7 @@ const styles = StyleSheet.create({
     scrollViewContent: {
         flexGrow: 1,
         alignItems: 'center',
-        paddingBottom: 20,
+        height: 900,
     },
     main: {
         flex: 1,
@@ -210,8 +230,10 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     logo: {
-        width: "70%",
-        margin: 20,
+        width: "50%",
+        height: "20%",
+        resizeMode: 'contain',
+        marginVertical: 20,
     },
     label: {
         width: "90%",

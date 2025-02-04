@@ -2,31 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, StyleSheet, Platform, SafeAreaView, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import colors from '../../assets/colors/theme';
-import { Link, useRouter, usePathname } from 'expo-router';
+import { Link, usePathname } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
   const { technician } = useAuth();
-  const [photo, setPhoto] = useState(require('../../assets/images/Default_pfp.jpg'));
-  const router = useRouter();
   const pathname = usePathname();
-
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    if (technician?.photo && isValidUrl(technician.photo)) {
-      setPhoto({ uri: technician.photo });
-    } else {
-      setPhoto(require('../../assets/images/Default_pfp.jpg'));
-    }
-  }, [technician]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -35,7 +16,7 @@ const Header = () => {
             {pathname.includes("map") && <Text style={styles.title}>Order in progress</Text>}
             <Link href="/(tabs)/profile" style={pathname.includes("map") && styles.profileImageMap}>
                 <Image
-                source={photo}
+                source={{ uri: technician?.photo }}
                 style={styles.profileImage}
                 />
             </Link>

@@ -1,14 +1,16 @@
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, SafeAreaView,TouchableOpacity, ScrollView, Image, Alert, Modal, Pressable } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, SafeAreaView,TouchableOpacity, ScrollView, Image, Alert, Modal, Pressable, ActivityIndicator } from "react-native";
 import { useAuth } from "../../../context/AuthContext";
 import { useCoords } from "../../../context/CoordsContext";
 import { useTechnician } from "../../../context/TechnicianContext";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from "react-native-maps";
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import MapViewDirections from 'react-native-maps-directions';
 import React from "react";
 import colors from "@/assets/colors/theme";
 import { useSocket } from "@/app/context/SocketContext";
+import { MediaStream, RTCPeerConnection,RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
+import Constants from "expo-constants";
 
 interface Coords {
   latitude: number;
@@ -24,32 +26,45 @@ interface Technician {
   photo: string;
   location: Coords | null;
   available: boolean;
+  companyId: string;
   company: string;
   rating: number;
-  services: number[]
+  reviews: number;
+  services: number[];
 }
 
-const GOOGLE_MAPS_API_KEY = '';
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 export default function ServiceScreen() {
-  const { user, loading } = useAuth();
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isCalling, setIsCalling] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ sender: string; senderData: any } | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+
+  const { user, loading, fetchUserInfo, createCall } = useAuth();
   const { id, name } = useLocalSearchParams();
   const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [loadingTechnicians, setLoadingTechnicians] = useState(true);
   const [acceptAlertVisible, setAcceptAlertVisible] = useState(false);
   const [rejectAlertVisible, setRejectAlertVisible] = useState(false);
   const [alertContent, setAlertContent] = useState({ title: '', message: '' });
   const [routeCoordinates, setRouteCoordinates] = useState<Coords[]>([]);
   const [duration, setDuration] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState(false);
   const router = useRouter();
   const { setTechnician } = useTechnician();
 
   const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(null);
   const [isModalVisible, setModalVisible] = useState(false);
+  const [callModalVisible, setCallModalVisible] = useState(false);
+
+  const [loadingCoords, setLoadingCoords] = useState(true);
 
   const { coords, address } = useCoords();
 
-  const [called, setCalled] = useState(true);
+  const [called, setCalled] = useState(false);
 
   const { socket } = useSocket();
   const socketPeer = {
@@ -61,51 +76,274 @@ export default function ServiceScreen() {
     photo: user?.photo,
     address: address,
     location: coords,
+    serviceId: id,
     serviceName: name
-  }
-
-  // useEffect(() => {
-  //   console.log(technicians)
-  // }, [technicians]);
+  };
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace("/auth/login");
-      } else {
-        // console.log("Logging user from services", user);
-      }
+    if (!loading && !user) {
+      router.replace("/auth/login");
     }
   }, [user, loading]);
+
+  const mapRef = useRef<MapView>(null);
+  
+  useEffect(() => {
+    if (mapRef.current && coords) {
+      mapRef.current.animateToRegion({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }, 1000);
+    }
+    setLoadingCoords(false);
+  }, [mapRef.current]);
+
+  useEffect(() => {
+    console.log("incomingCall: ", incomingCall);
+  }, [incomingCall]);
 
   useEffect(() => { //
     socket?.emit("register", socketPeer);
     console.log("Registered as user:", socketPeer.socketId);
-  }, []);
 
-  useEffect(() => {
     socket?.on("peer-list", (technicians: Technician[]) => { //
       setTechnicians(technicians);
+      // console.log(technicians);
     });
 
-    socket?.on("hire-accepted", ({ technicianId }) => { //
-      console.log(`Technician ${technicianId} accepted the job!`);
-      showAcceptAlert("Your address was sent to the technician", "Your issue will be solved soon..")
-      setTimeout(()=> router.replace("/(tabs)/(root)/contact/map"), 2000)
+    socket?.on("offer", ({ offer, sender, senderData }) => {
+      console.log(`Incoming offer from ${sender} with data:`, senderData);
+      setIncomingCall({ sender, senderData });
+      setCallModalVisible(true);
+      handleOffer(offer, sender);
     });
 
-    socket?.on("hire-rejected", ({ technicianId }) => { //
-      setTechnician(null)
-      showRejectAlert("Rejected",`${selectedTechnician?.firstName} rejected the job.`)
-      console.log(`Technician ${technicianId} rejected the job.`);
+    socket?.on("answer", handleAnswer);
+    socket?.on("ice-candidate", handleIceCandidate);
+    socket?.on("call-rejected", ({senderData}) => {
+      resetCallState();
+      showRejectAlert("Rejected",`${senderData.firstName} rejected the call.`)
+      setCallModalVisible(false);
+      console.log("Call rejected.");
     });
+
+    socket?.on("call-ended", ({ senderData }) => {
+      resetCallState();
+      // showRejectAlert("Ended",`${senderData.firstName} ended the call.`)
+      setCalled(true)
+      console.log("Call ended.");
+    });
+
+    socket?.on("call-cancelled", () => {
+      resetCallState();
+      console.log(`Call cancelled`);
+    });
+
+    const getUserMedia = async () => {
+      const constraints = { audio: true, video: false };
+      try {
+        const stream = await mediaDevices.getUserMedia(constraints);
+  
+        if (stream.getAudioTracks().length === 0) {
+          console.error("No audio tracks found.");
+          return;
+        }
+
+        setLocalStream(stream);
+        console.log("Local stream obtained.");
+      } catch (err) {
+        console.error("Failed to get user media:", err);
+      }
+    };
+
+    getUserMedia();
 
     return () => { //
       socket?.off("peer-list");
+      socket?.off("offer");
+      socket?.off("answer");
+      socket?.off("ice-candidate");
+      socket?.off("call-rejected");
+      socket?.off("call-ended");
+      socket?.off("call-cancelled");
       socket?.off("hire-accepted");
       socket?.off("hire-rejected");
     };
   }, []);
+
+  useEffect(() => {
+    if (inCall && !remoteStream) {
+      console.warn("Remote stream is missing. Debugging...");
+    }
+  }, [inCall, remoteStream]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user?.id) {
+          await fetchUserInfo(user.id);
+      }
+    };
+
+    fetchData();
+  }, [user?.id]);
+
+  const handleOffer = async (offer: RTCSessionDescription, sender: string) => {
+    const peerConnection = createPeerConnection(sender);
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("Offer set to remote description.");
+
+    iceCandidateQueue.current.forEach((candidate) => {
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("Queued ICE candidate added.");
+    });
+    iceCandidateQueue.current = [];
+
+    peerConnectionRef.current = peerConnection;
+  };
+
+  const handleAnswer = async (answer: { answer: RTCSessionDescription } | null) => {
+    console.log(selectedTechnician?.socketId)
+    if (answer && answer.answer) {
+      const { answer: sessionDescription } = answer;
+
+      console.log("Received valid answer:", sessionDescription);
+
+      if (peerConnectionRef.current) {
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          console.log("Remote description set successfully.");
+          console.log("selectedTechnician", selectedTechnician?.socketId)
+
+          setInCall(true);
+          setCallModalVisible(true);
+          console.log("selectedTechnician", selectedTechnician?.socketId)
+        } catch (error) {
+          console.error("Error setting remote description:", error);
+        }
+      }
+    } else {
+      console.error("Received invalid answer:", answer);
+    }
+  };
+
+  const handleIceCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+    console.log("Received ICE candidate:", candidate);
+    if (peerConnectionRef.current) {
+      if (peerConnectionRef.current.remoteDescription) {
+        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        iceCandidateQueue.current.push(candidate);
+        console.log("ICE candidate queued.");
+      }
+    }
+  };
+
+  const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    peerConnection.addEventListener('track', event => {
+      console.log("Remote stream received", event.streams[0]);
+      setRemoteStream(event.streams[0]);
+    });
+
+    peerConnection.addEventListener('icecandidate', event => {
+      if (event.candidate) {
+        socket?.emit("ice-candidate", { target: targetPeer, candidate: event.candidate });
+        console.log(`ICE candidate sent to: ${targetPeer}`);
+      }
+    });
+
+    return peerConnection;
+  };
+
+  const startCall = async () => {
+    if (!localStream || !selectedTechnician) return;
+
+    const peerConnection = createPeerConnection(selectedTechnician.companyId); // companyId or socketID
+
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+
+    const offerOptions = {
+      offerToReceiveAudio: 1,
+    };
+
+    try {
+      const offer = await peerConnection.createOffer(offerOptions);
+      await peerConnection.setLocalDescription(offer);
+
+      socket?.emit("offer", { target: selectedTechnician.companyId, offer }); // companyId or socketID
+      peerConnectionRef.current = peerConnection;
+
+      setIsCalling(true);
+      setCallModalVisible(true);
+      console.log(`Calling peer: ${selectedTechnician}`);
+    } catch (error) {
+      console.error("Error creating or setting offer:", error);
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!incomingCall || !localStream) return;
+  
+    const peerConnection = peerConnectionRef.current!;
+  
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+  
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+  
+    socket?.emit("answer", { target: incomingCall.sender, answer });
+
+    if (user?.id !== undefined) {
+      await createCall(user.id, incomingCall.senderData.id);
+    }
+  
+    setInCall(true);
+    setCallModalVisible(true);
+    console.log(`Call accepted with ${incomingCall.sender}`);
+  };
+
+  const rejectCall = () => {
+    if (incomingCall) {
+      socket?.emit("call-rejected", { target: incomingCall.sender });
+      console.log(`Call rejected from ${incomingCall.sender}`);
+      setIncomingCall(null);
+      setCallModalVisible(false);
+    }
+  };
+
+  const endCall = () => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+
+    resetCallState();
+    socket?.emit("call-ended", { target: selectedTechnician?.companyId || incomingCall?.sender }); // companyId or socketID
+    setCalled(true)
+    console.log("Call ended.");
+  };
+
+  const cancelCall = () => {
+    if (isCalling) {
+      socket?.emit("call-cancelled", { target: selectedTechnician?.companyId }); // companyId or socketID
+      console.log(`Call cancelled to ${selectedTechnician?.socketId}`);
+      resetCallState();
+    }
+  };
+
+  const resetCallState = () => {
+    setIsCalling(false);
+    setInCall(false);
+    setIncomingCall(null);
+    setCallModalVisible(false);
+    peerConnectionRef.current = null;
+    setRemoteStream(null);
+  };
 
   useEffect(() => {
     if (coords) {
@@ -116,134 +354,10 @@ export default function ServiceScreen() {
   useEffect(() => {
     console.log("serviceName", name)
     console.log("serviceId", id)
-    const fetchServices = async () => {
-      setLoadingTechnicians(true);
-      try {
-        const response = await fetch(`http://localhost:3000/technicians/service/${id}`);
-        if (!response.ok) {
-          throw new Error(`Error: ${response.status}`);
-        }
-        const result = await response.json();
-        setTechnicians(result);
-      } catch (err) {
-        // setTechnicians([
-        // {
-        //     "id": 1,
-        //     "role": "technician",
-        //     "firstName": "David",
-        //     "lastName": "Jones",
-        //     "photo": "https://plus.unsplash.com/premium_photo-1689530775582-83b8abdb5020?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //     "location": {latitude: 6.1964825999999995, longitude: -75.57387140463291},
-        //     "rating": 5,
-        //     "company": "ServNow",
-        //   },
-        //   {
-        //       "id": 2,
-        //       "firstName": "John",
-        //       "lastName": "Doe",
-        //       "photo": "https://plus.unsplash.com/premium_photo-1689539137236-b68e436248de?q=80&w=871&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //       "location": {latitude: 6.1989072, longitude: -75.57493439594916},
-        //       "rating": 5,
-        //       "company": {
-        //           "name": "Tech Solutions",
-        //           "serviceId": 1,
-        //       },
-        //   },
-        //   {
-        //       "id": 3,
-        //       "firstName": "Jane",
-        //       "lastName": "Smith",
-        //       "photo": "https://plus.unsplash.com/premium_photo-1688572454849-4348982edf7d?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //       "location": {latitude: 6.19702045, longitude: -75.5591826240879},
-        //       "rating": 5,
-        //       "company": {
-        //           "name": "Tech Solutions",
-        //           "serviceId": 1,
-        //       }
-        //   },
-        //   {
-        //     "id": 4,
-        //     "firstName": "David",
-        //     "lastName": "Jones",
-        //     "photo": "https://plus.unsplash.com/premium_photo-1689530775582-83b8abdb5020?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //     "location": {latitude: 6.248217, longitude: -75.580032},
-        //     "rating": 5,
-        //     "company": {
-        //         "name": "ServNow",
-        //         "serviceId": 1,
-        //     },
-        //   },
-        //   {
-        //     "id": 5,
-        //     "firstName": "John",
-        //     "lastName": "Doe",
-        //     "photo": "https://plus.unsplash.com/premium_photo-1689539137236-b68e436248de?q=80&w=871&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //     "location": {latitude: 6.1881323, longitude: -75.5836944},
-        //     "rating": 5,
-        //     "company": {
-        //         "name": "Tech Solutions",
-        //         "serviceId": 1,
-        //     },
-        //   },
-        //   {
-        //     "id": 6,
-        //     "firstName": "Jane",
-        //     "lastName": "Smith",
-        //     "photo": "https://plus.unsplash.com/premium_photo-1688572454849-4348982edf7d?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //     "location": {latitude: 6.2964825999999995, longitude: -75.57387140463291},
-        //     "rating": 5,
-        //     "company": {
-        //         "name": "Tech Solutions",
-        //           "serviceId": 1,
-        //     }
-        //   },
-        //   {
-        //     "id": 7,
-        //     "firstName": "David",
-        //     "lastName": "Jones",
-        //     "photo": "https://plus.unsplash.com/premium_photo-1689530775582-83b8abdb5020?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //     "location": {latitude: 6.3964825999999995, longitude: -75.57387140463291},
-        //     "rating": 5,
-        //     "company": {
-        //         "name": "ServNow",
-        //         "serviceId": 1,
-        //     },
-        //   },
-        //   {
-        //       "id": 8,
-        //       "firstName": "John",
-        //       "lastName": "Doe",
-        //       "photo": "https://plus.unsplash.com/premium_photo-1689539137236-b68e436248de?q=80&w=871&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //       "location": {latitude: 6.4964825999999995, longitude: -75.57387140463291},
-        //       "rating": 5,
-        //       "company": {
-        //           "name": "Tech Solutions",
-        //           "serviceId": 1,
-        //       },
-        //   },
-        //   {
-        //     "id": 9,
-        //     "firstName": "Jane",
-        //     "lastName": "Smith",
-        //     "photo": "https://plus.unsplash.com/premium_photo-1688572454849-4348982edf7d?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-        //     "location": {latitude: 6.5964825999999995, longitude: -75.57387140463291},
-        //     "rating": 5,
-        //     "company": {
-        //         "name": "Tech Solutions",
-        //         "serviceId": 1,
-        //     }
-        //   },
-        // ])
-        // console.error("error", err);
-      } finally {
-        setLoadingTechnicians(false)
-      }
-    };
-
-    fetchServices();
   }, []);
 
-  const fetchDuration = async (origin: Coords,destination: Coords) => {
+  const fetchDuration = useCallback(async (origin: Coords, destination: Coords) => {
+    if (!origin || !destination) return;
     try {
       const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_API_KEY}`;
       const response = await fetch(url);
@@ -259,7 +373,7 @@ export default function ServiceScreen() {
       console.error("Error fetching directions:", error);
       return "N/A";
     }
-  };
+  }, []);
 
   const showAcceptAlert = (title: string, message: string) => {
     setAlertContent({ title, message });
@@ -271,33 +385,30 @@ export default function ServiceScreen() {
     setRejectAlertVisible(true);
   };
 
-  const callTechnician = (technician: Technician) => {
-    setCalled(true)
-    router.push("/(tabs)/(root)/contact/call")
-  };
-
-  // const hireTechnician = (technician: Technician) => {
-  //   setTechnician(technician)
-  //   showAcceptAlert("Your address was sent to the technician", "Your issue will be solved soon..")
-  //   setTimeout(()=> router.replace("/(tabs)/(root)/contact/map"), 2000)
-  // };
-
   const hireTechnician = (technician: Technician) => { //
-    setTechnician(technician)
+    setWaiting(true);
     socket?.emit("hire", { technicianId: technician.socketId, clientId: socketPeer.socketId });
-  };
 
-  // const openTechnician = (technician: Technician) => {
-  //   setSelectedTechnician(technician);
-  //   setRouteCoordinates([
-  //     { latitude: technician.location.latitude, longitude: technician.location.longitude },
-  //     coords as Coords,
-  //   ])
-  //   if (technician.location) {
-  //     fetchDuration({ latitude: technician.location.latitude, longitude: technician.location.longitude }, coords as Coords);
-  //   }
-  //   setModalVisible(true);
-  // };
+    socket?.on("hire-accepted", async (technicianData) => { //
+      setWaiting(false);
+      console.log(`Technician ${technicianData.firstName} accepted the job!`);
+      setTechnician(technicianData);
+      if (socketPeer.id !== undefined) {
+        const job = await fetchUserInfo(socketPeer.id);
+        console.log(job);
+      } else {
+        console.error("socketPeer.id is undefined");
+      }
+      showAcceptAlert("Your address was sent to the technician", "Your issue will be solved soon..")
+      setTimeout(()=> router.replace("/(tabs)/(root)/contact/map"), 2000)
+    });
+
+    socket?.on("hire-rejected", (technicianData) => { //
+      setWaiting(false)
+      showRejectAlert("Rejected",`${technicianData?.firstName} rejected the job.`)
+      console.log(`Technician ${technicianData.firstName} rejected the job.`);
+    });
+  };
 
   const openTechnician = (technician: Technician) => {
     setSelectedTechnician(technician);
@@ -335,9 +446,10 @@ export default function ServiceScreen() {
     setRouteCoordinates([])
     setDuration(null)
     setSelectedTechnician(null);
+    setCalled(false);
   };
 
-  const renderStars = (rating: number) => {
+  const renderStars = (rating: number, reviews: number) => {
     const fullStars = Math.floor(rating);
     const stars = [];
 
@@ -356,33 +468,27 @@ export default function ServiceScreen() {
       <View style={styles.ratingContainer}>
           <Text style={styles.ratingNumber}>{rating.toFixed(1)}</Text>
           <View style={styles.starsContainer}>{stars}</View>
-          <Text style={styles.ratings}> (300)</Text>
+          <Text style={styles.ratings}> ({reviews})</Text>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {loadingTechnicians ? (
-      <View style={styles.container}>
-        <Text>Loading technicians...</Text>
-      </View>
-    ) : (
-      <MapView
+      {loadingCoords? <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>:<MapView ref={mapRef} 
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={{
-          latitude: coords?.latitude || 0,
-          longitude: coords?.longitude || 0,
+          latitude: coords?.latitude ?? 0,
+          longitude: coords?.longitude ?? 0,
           latitudeDelta: 0.0112,
           longitudeDelta: 0.0121,
         }}
       >
         <Marker
-          coordinate={{
-            latitude: coords?.latitude || 0,
-            longitude: coords?.longitude || 0,
-          }}
+          coordinate={coords as Coords}
           title="Current Location"
         >
           <Image
@@ -391,20 +497,8 @@ export default function ServiceScreen() {
             resizeMode="contain"
           />
         </Marker>
-        {/* {technicians && technicians.map((technician) => (
-          <Marker
-            key={technician.id}
-            coordinate={{
-              latitude: technician.location.latitude,
-              longitude: technician.location.longitude,
-            }}
-            onPress={() => openTechnician(technician)}
-          >
-            <Image source={{ uri: technician.photo }} style={styles.markerImage} />
-          </Marker>
-        ))} */}
 
-        {technicians.filter((technician) => technician.role === "technician" && technician.available && technician.services.some((service) => service === parseInt(id as string)))
+        {technicians.filter((technician) => technician.role === "technician" && technician.services.some((service) => service === parseInt(id as string)))
         .map((technician) => (
           <Marker 
             key={technician.socketId}
@@ -422,14 +516,13 @@ export default function ServiceScreen() {
             longitude: selectedTechnician?.location?.longitude || 0,
           }}
           destination={{latitude: coords?.latitude || 0, longitude: coords?.longitude || 0}}
-          apikey={GOOGLE_MAPS_API_KEY}
+          apikey={GOOGLE_MAPS_API_KEY || ""}
           strokeWidth={4}
           strokeColor={colors.primary}
           lineDashPattern={[5, 10]}
         />
         )}
-      </MapView>
-    )}
+      </MapView>}
 
       {/* Modal for Technician Details */}
       <Modal
@@ -438,7 +531,7 @@ export default function ServiceScreen() {
         animationType="slide"
         onRequestClose={closeTechnician}
       >
-        <Pressable style={styles.overlay} onPress={closeTechnician} />
+        <Pressable style={styles.overlay} onPress={closeTechnician} disabled={called}/>
         <View style={styles.bottomSheet}>
           {selectedTechnician && (
             <>
@@ -452,26 +545,28 @@ export default function ServiceScreen() {
                       {selectedTechnician && `${selectedTechnician.firstName} ${selectedTechnician.lastName}`}
                       </Text>
                       <Text style={styles.technicianService}>
-                      {selectedTechnician && `${selectedTechnician.firstName} ${selectedTechnician.lastName}`}
+                      {name}
                       </Text>
                       <Text style={styles.technicianCompany}>By {selectedTechnician && selectedTechnician.company}
                       </Text>
                       <View style={styles.technicianRating}>
-                        {renderStars(selectedTechnician.rating)}
+                        {renderStars(selectedTechnician.rating, selectedTechnician.reviews)}
                       </View>
                     </View>
                   </View>
-                {!called && <TouchableOpacity style={styles.callButton} onPress={()=> callTechnician(selectedTechnician)}>
+                {!called && <TouchableOpacity style={styles.callButton} onPress={()=> {
+                  startCall()
+                }}>
                   <Image source={require("../../../../assets/icons/phone.png")} style={styles.callIcon} />
                   <Text style={styles.buttonText}>Call {selectedTechnician.firstName}</Text>
                 </TouchableOpacity>}
                 {called && 
                 <>
-                <TouchableOpacity style={styles.hireButton} onPress={()=> hireTechnician(selectedTechnician)}>
-                    <Text style={styles.buttonText}>Accept & Share address</Text>
+                <TouchableOpacity style={styles.hireButton} onPress={()=> hireTechnician(selectedTechnician)} disabled={waiting}>
+                    <Text style={styles.buttonText}>{waiting ? "Waiting for technician..." : "Accept & Share address"}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelButton} onPress={closeTechnician}>
-                    <Text style={styles.buttonText}>Change Vendor</Text>
+                <TouchableOpacity style={styles.cancelButton} onPress={closeTechnician} disabled={waiting}>
+                    <Text style={styles.buttonText}>{waiting ? "Waiting for technician..." : "Change Vendor"}</Text>
                 </TouchableOpacity>
                 </>}
             </>
@@ -486,12 +581,12 @@ export default function ServiceScreen() {
           animationType="fade"
           onRequestClose={() => setAcceptAlertVisible(false)}
       >
-          <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                  <Text style={styles.modalMessage}>{alertContent.title}</Text>
-                  <Text style={styles.modalMessage}>{alertContent.message}</Text>
-              </View>
-          </View>
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <Text style={styles.modalMessage}>{alertContent.title}</Text>
+                <Text style={styles.modalMessage}>{alertContent.message}</Text>
+            </View>
+        </View>
       </Modal>
 
       <Modal
@@ -500,22 +595,71 @@ export default function ServiceScreen() {
           animationType="fade"
           onRequestClose={() => setRejectAlertVisible(false)}
       >
-          <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>{alertContent.title}</Text>
-                  <Text style={styles.modalMessage}>{alertContent.message}</Text>
-                  <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => {
-                          setRejectAlertVisible(false)
-                          closeTechnician()
-                        }
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>{alertContent.title}</Text>
+                <Text style={styles.modalMessage}>{alertContent.message}</Text>
+                <TouchableOpacity
+                    style={styles.modalButton}
+                    onPress={() => {
+                        setRejectAlertVisible(false)
+                        closeTechnician()
                       }
-                  >
-                      <Text style={styles.modalButtonText}>Close</Text>
+                    }
+                >
+                    <Text style={styles.modalButtonText}>Close</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+      </Modal>
+
+      {/* Modal for Calls */}
+      <Modal visible={callModalVisible} transparent={true} animationType="slide">
+        <View style={styles.callModalContainer}>
+          <View style={styles.callModalContent}>
+            {isCalling && !inCall && !incomingCall && (
+              <>
+              <Text style={styles.callModalText}>Calling {selectedTechnician?.firstName}</Text>
+              <Image source={{ uri: selectedTechnician?.photo }} style={styles.callPhoto} />
+              <TouchableOpacity style={styles.callModalButton} onPress={cancelCall}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              </>
+            )}
+            {inCall && !incomingCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {selectedTechnician?.firstName}</Text>
+                <Image source={{ uri: selectedTechnician?.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && inCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {incomingCall.senderData.firstName }</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && !inCall && (
+              <>
+                <Text style={styles.callModalText}>Incoming call from {incomingCall.senderData.firstName}</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <View style={{ flexDirection: "row", gap: 50 }}>
+                  <TouchableOpacity style={styles.callModalButton} onPress={acceptCall}>
+                    <Text style={styles.buttonText}>Accept Call</Text>
                   </TouchableOpacity>
-              </View>
+                  <TouchableOpacity style={styles.callModalButton} onPress={rejectCall}>
+                    <Text style={styles.buttonText}>Reject Call</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -691,5 +835,33 @@ const styles = StyleSheet.create({
   modalButtonText: {
       color: '#fff',
       fontWeight: 'bold',
+  },
+  callModalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  callModalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    width: "90%",
+  },
+  callModalText: {
+    fontSize: 25,
+  },
+  callModalButton: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    marginVertical: 5,
+    borderRadius: 5,
+  },
+  callPhoto: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginVertical: 80,
   },
 });

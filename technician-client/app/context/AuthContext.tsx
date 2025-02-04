@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
 
 interface Service {
   id: number;
@@ -44,6 +45,7 @@ interface Review {
   description: string;
   rating: number;
   technicianId: number;
+  jobId: number;
 }
 
 interface Job {
@@ -56,6 +58,7 @@ interface Job {
   user: User;
   technician: Technician;
   service: Service;
+  technicianReview: Review
 }
 
 interface Call {
@@ -92,6 +95,11 @@ interface AuthContextType {
   signInTechnician: (email: string, password: string) => Promise<void>;
   updateTechnician: (updatedTechnician: Partial<Technician>, updatedServices: number[]) => Promise<void>;
   logOutTechnician: () => Promise<void>;
+  acceptJob: (technicianId: Number, userId: Number, serviceId: Number) => Promise<void>;
+  fetchTechnicianInfo: (technicianId: number) => Promise<void>;
+  createCall: (technicianId: number, userId: number) => Promise<void>;
+  review: (userId: number, jobId: number, rating: number) => Promise<void>;
+  toggleAvailability: (technicianId: number, available: boolean) => Promise<void>;
   setStorageKey: (key: string, value: string | null) => Promise<void>;
 }
 
@@ -149,7 +157,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUpTechnician = async (firstName: string, lastName: string, email: string, companyId: string, password: string) => {
     try {
-      const response = await fetch("http://10.0.2.2:3000/technicians", {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -174,7 +182,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInTechnician = async (email: string, password: string) => {
     try {
-      const response = await fetch("http://10.0.2.2:3000/technicians/login", {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -199,7 +207,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!technician) return;
   
     try {
-      const response = await fetch(`http://10.0.2.2:3000/technicians/${technician.id}`, {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/${technician.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -217,7 +225,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       const newTechnician = { ...technician, ...data, services: updatedServices };
       setTechnician(newTechnician);
-      await setStorageItem("auth_Technician", JSON.stringify(newTechnician));
+      await setStorageItem("auth_technician", JSON.stringify(newTechnician));
     } catch (error) {
       console.error("Error updating technician:", error);
       throw error;
@@ -227,6 +235,122 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logOutTechnician = async () => {
     setTechnician(null);
     await setStorageItem("auth_technician", null);
+  };
+
+  const acceptJob = async (technicianId: Number, userId: Number, serviceId: Number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/accept-job`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ technicianId, userId, serviceId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid email or password");
+      }
+
+      const updatedTechnician = await response.json();
+      setTechnician(updatedTechnician);
+      const latestJob = updatedTechnician.jobs?.[updatedTechnician.jobs.length - 1];
+      if (latestJob) {
+        console.log("Job accepted:", latestJob);
+        return latestJob;
+      } else {
+        throw new Error("Failed to accept job");
+      }
+    } catch (error) {
+      console.error("Error during login:", error);
+      throw error;
+    }
+  }
+
+  const fetchTechnicianInfo = async (technicianId: number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/${technicianId}`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+          throw new Error("Failed to fetch technician information");
+      }
+
+      const technician = await response.json();
+      setTechnician(technician);
+    } catch (error) {
+      console.error("Error fetching technician info:", error);
+      throw error;
+    }
+  };
+
+  const createCall = async (technicianId: number, userId: number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/create-call`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ technicianId, userId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create a call");
+      }
+
+      console.log("Call created successfully");
+      const technician = await response.json();
+      setTechnician(technician);
+    } catch (error) {
+      console.error("Error creating a call", error);
+      throw error;
+    }
+  };
+
+  const review = async (userId: number, jobId: number, rating: number) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, jobId, rating }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to review");
+      }
+
+      console.log("Review created successfully");
+    } catch (error) {
+      console.error("Error creating a review", error);
+      throw error;
+    }
+  };
+
+  const toggleAvailability = async (technicianId: number, available: boolean) => {
+    try {
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/${technicianId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ available }),
+      });
+  
+      if (!response.ok) {
+        throw new Error('Failed to toggle availability');
+      }
+  
+      console.log("Toggled availability successfully");
+      const technician = await response.json();
+      setTechnician(technician);
+    } catch (error) {
+      console.error('Error toggling availability:', error);
+    }
   };
 
   const setStorageKey = async (key: string, value: string | null) => {
@@ -242,6 +366,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signInTechnician,
         updateTechnician,
         logOutTechnician,
+        acceptJob,
+        fetchTechnicianInfo,
+        createCall,
+        review,
+        toggleAvailability,
         setStorageKey,
       }}
     >

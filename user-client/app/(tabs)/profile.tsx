@@ -12,7 +12,7 @@ const ProfileScreen = () => {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [newPassword, setNewPassword] = useState('');
-  const [photo, setPhoto] = useState(require("../../assets/images/Default_pfp.jpg"));
+  const [photo, setPhoto] = useState({ uri: user?.photo || '' });
   const [showPassword, setShowPassword] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', message: '' });
@@ -21,23 +21,6 @@ const ProfileScreen = () => {
 
   useEffect(() => {
     console.log("Logging user from profile", user);
-  }, [user]);
-
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    if (user?.photo && isValidUrl(user.photo)) {
-      setPhoto({ uri: user.photo });
-    } else {
-      setPhoto(require("../../assets/images/Default_pfp.jpg"));
-    }
   }, [user]);
 
   const handleSave = async () => {
@@ -107,9 +90,9 @@ const ProfileScreen = () => {
             <View style={styles.main}>
                 {/* Profile Picture */}
                 <Image source={photo} style={styles.profileImage} />
-                <TouchableOpacity>
+                {/* <TouchableOpacity>
                     <Text style={styles.changePhoto}>Change photo</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
 
                 {/* Editable Fields */}
                 <Text style={styles.label}>First Name</Text>
@@ -149,7 +132,8 @@ const ProfileScreen = () => {
                 <Text style={styles.label}>New Password</Text>
                 <View style={styles.passwordContainer}>
                     <TextInput
-                        style={styles.input}
+                        editable={false}
+                        style={styles.disabledInput}
                         placeholder="Enter new password"
                         value={newPassword}
                         onChangeText={text => { setNewPassword(text); handleChange(); }}
@@ -261,6 +245,17 @@ const styles = StyleSheet.create({
     height: 40,
     width: '90%',
     backgroundColor: '#fff',
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    marginBottom: 10,
+    paddingLeft: 20,
+    fontWeight: '500',
+  },
+  disabledInput: {
+    height: 40,
+    width: '90%',
+    backgroundColor: colors.border,
     borderColor: colors.primary,
     borderWidth: 1.5,
     borderRadius: 10,

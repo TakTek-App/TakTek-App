@@ -13,7 +13,7 @@ const ProfileScreen = () => {
   const [email, setEmail] = useState(technician?.email || '');
   const [company, ] = useState(technician?.company.name || '');
   const [newPassword, setNewPassword] = useState('');
-  const [photo, setPhoto] = useState(require("../../assets/images/Default_pfp.jpg"));
+  const [photo, setPhoto] = useState({ uri: technician?.photo || '' });
   const [showPassword, setShowPassword] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', message: '' });
@@ -66,23 +66,6 @@ const ProfileScreen = () => {
 
   useEffect(() => {
     console.log("Logging technician from profile", technician?.jobs);
-  }, [technician]);
-
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    if (technician?.photo && isValidUrl(technician.photo)) {
-      setPhoto({ uri: technician.photo });
-    } else {
-      setPhoto(require("../../assets/images/Default_pfp.jpg"));
-    }
   }, [technician]);
 
   const handleSave = async () => {
@@ -151,9 +134,9 @@ const ProfileScreen = () => {
             <View style={styles.main}>
                 {/* Profile Picture */}
                 <Image source={photo} style={styles.profileImage} />
-                <TouchableOpacity>
+                {/* <TouchableOpacity>
                     <Text style={styles.changePhoto}>Change photo</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
 
                 {/* Editable Fields */}
                 <Text style={styles.label}>First Name</Text>
@@ -230,7 +213,8 @@ const ProfileScreen = () => {
                 <Text style={styles.label}>New Password</Text>
                 <View style={styles.passwordContainer}>
                     <TextInput
-                        style={styles.input}
+                        editable={false}
+                        style={styles.disabledInput}
                         placeholder="Enter new password"
                         value={newPassword}
                         onChangeText={text => { setNewPassword(text); handleChange(); }}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, Platform, Modal } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, LatLng, Region, PROVIDER_DEFAULT } from 'react-native-maps';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,9 +9,10 @@ import colors from "../../../../assets/colors/theme";
 import MapViewDirections from 'react-native-maps-directions';
 import { useSocket } from "@/app/context/SocketContext";
 import { useAuth } from '@/app/context/AuthContext';
+import { MediaStream, RTCPeerConnection,RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
+import Constants from 'expo-constants';
 
-const GOOGLE_MAPS_API_KEY = '';
-// const GOOGLE_MAPS_API_KEY = '';
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 interface Coords {
   latitude: number;
@@ -32,7 +33,15 @@ interface Technician {
 }
 
 const MapScreen: React.FC = () => {
-  const { user } = useAuth();
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isCalling, setIsCalling] = useState(false);
+  const [inCall, setInCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ sender: string; senderData: any } | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+
+  const { user, createCall, review } = useAuth();
   const [routeCoordinates, setRouteCoordinates] = useState<Coords[]>([]);
   const [duration, setDuration] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -50,12 +59,60 @@ const MapScreen: React.FC = () => {
   const { socket } = useSocket();
   const [peerLocations, setPeerLocations] = useState<Technician[]>([]); //
 
+  const [callModalVisible, setCallModalVisible] = useState(false);
+
   const socketId = user?.email
 
   useEffect(() => {
     socket?.on("peer-list", (technicians: Technician[]) => { //
       setPeerLocations(technicians);
     });
+
+    socket?.on("offer", ({ offer, sender, senderData }) => {
+      console.log(`Incoming offer from ${sender} with data:`, senderData);
+      setIncomingCall({ sender, senderData });
+      setCallModalVisible(true);
+      handleOffer(offer, sender);
+    });
+
+    socket?.on("answer", handleAnswer);
+    socket?.on("ice-candidate", handleIceCandidate);
+    socket?.on("call-rejected", ({senderData}) => {
+      resetCallState();
+      showAlert("Rejected",`${senderData.firstName} rejected the call.`)
+      setCallModalVisible(false);
+      console.log("Call rejected.");
+    });
+
+    socket?.on("call-ended", ({ senderData }) => {
+      resetCallState();
+      showAlert("Ended",`${senderData.firstName} ended the call.`)
+      console.log("Call ended.");
+    });
+
+    socket?.on("call-cancelled", () => {
+      resetCallState();
+      console.log(`Call cancelled`);
+    });
+
+    const getUserMedia = async () => {
+      const constraints = { audio: true, video: false };
+      try {
+        const stream = await mediaDevices.getUserMedia(constraints);
+  
+        if (stream.getAudioTracks().length === 0) {
+          console.error("No audio tracks found.");
+          return;
+        }
+
+        setLocalStream(stream);
+        console.log("Local stream obtained.");
+      } catch (err) {
+        console.error("Failed to get user media:", err);
+      }
+    };
+
+    getUserMedia();
 
     socket?.on("service-cancelled", () => {
       showAlert("Service cancelled", `${technician?.firstName} cancelled the service`)
@@ -69,9 +126,176 @@ const MapScreen: React.FC = () => {
 
     return () => { //
       socket?.off("peer-list");
+      socket?.off("offer");
+      socket?.off("answer");
+      socket?.off("ice-candidate");
+      socket?.off("call-rejected");
+      socket?.off("call-ended");
+      socket?.off("call-cancelled");
+      socket?.off("service-cancelled");
       socket?.off("service-ended");
     };
   }, []);
+
+  useEffect(() => {
+    if (inCall && !remoteStream) {
+      console.warn("Remote stream is missing. Debugging...");
+    }
+  }, [inCall, remoteStream]);
+
+  const handleOffer = async (offer: RTCSessionDescription, sender: string) => {
+    const peerConnection = createPeerConnection(sender);
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("Offer set to remote description.");
+
+    iceCandidateQueue.current.forEach((candidate) => {
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("Queued ICE candidate added.");
+    });
+    iceCandidateQueue.current = [];
+
+    peerConnectionRef.current = peerConnection;
+  };
+
+  const handleAnswer = async (answer: { answer: RTCSessionDescription } | null) => {
+    console.log(technician?.socketId)
+    if (answer && answer.answer) {
+      const { answer: sessionDescription } = answer;
+
+      console.log("Received valid answer:", sessionDescription);
+
+      if (peerConnectionRef.current) {
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          console.log("Remote description set successfully.");
+          console.log(technician?.socketId)
+
+          setInCall(true);
+          setCallModalVisible(true);
+          console.log(technician?.socketId)
+        } catch (error) {
+          console.error("Error setting remote description:", error);
+        }
+      }
+    } else {
+      console.error("Received invalid answer:", answer);
+    }
+  };
+
+  const handleIceCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+    console.log("Received ICE candidate:", candidate);
+    if (peerConnectionRef.current) {
+      if (peerConnectionRef.current.remoteDescription) {
+        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        iceCandidateQueue.current.push(candidate);
+        console.log("ICE candidate queued.");
+      }
+    }
+  };
+
+  const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    peerConnection.addEventListener( 'track', event => {
+      console.log("Remote stream received", event.streams[0]);
+      setRemoteStream(event.streams[0]);
+    });
+
+    peerConnection.addEventListener( 'icecandidate', event => {
+      if (event.candidate) {
+        socket?.emit("ice-candidate", { target: targetPeer, candidate: event.candidate });
+        console.log(`ICE candidate sent to: ${targetPeer}`);
+      }
+    });
+
+    return peerConnection;
+  };
+
+  const startCall = async () => {
+    if (!localStream || !technician) return;
+
+    const peerConnection = createPeerConnection(technician.companyId); // companyId or socketID
+
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+
+    const offerOptions = {
+      offerToReceiveAudio: 1,
+    };
+
+    try {
+      const offer = await peerConnection.createOffer(offerOptions);
+      await peerConnection.setLocalDescription(offer);
+
+      socket?.emit("offer", { target: technician?.companyId, offer }); // companyId or socketID
+      peerConnectionRef.current = peerConnection;
+
+      setIsCalling(true);
+      setCallModalVisible(true);
+      console.log(`Calling peer: ${technician?.socketId}`);
+    } catch (error) {
+      console.error("Error creating or setting offer:", error);
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!incomingCall || !localStream) return;
+  
+    const peerConnection = peerConnectionRef.current!;
+  
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+  
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+  
+    socket?.emit("answer", { target: incomingCall.sender, answer });
+
+    if (user?.id !== undefined) {
+      await createCall(user.id, incomingCall.senderData.id);
+    }
+  
+    setInCall(true);
+    setCallModalVisible(true);
+    console.log(`Call accepted with ${incomingCall.sender}`);
+  };
+
+  const rejectCall = () => {
+    if (incomingCall) {
+      socket?.emit("call-rejected", { target: incomingCall.sender });
+      console.log(`Call rejected from ${incomingCall.sender}`);
+      setIncomingCall(null);
+      setCallModalVisible(false);
+    }
+  };
+
+  const endCall = () => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+
+    resetCallState();
+    socket?.emit("call-ended", { target: technician?.companyId || incomingCall?.sender }); // companyId or socketID
+    console.log("Call ended.");
+  };
+
+  const cancelCall = () => {
+    if (isCalling) {
+      socket?.emit("call-cancelled", { target: technician?.companyId }); // companyId or socketID
+      console.log(`Call cancelled to ${technician?.socketId}`);
+      resetCallState();
+    }
+  };
+
+  const resetCallState = () => {
+    setIsCalling(false);
+    setInCall(false);
+    setCallModalVisible(false);
+    peerConnectionRef.current = null;
+    setRemoteStream(null);
+  };
 
   const cancelService = () => {
     socket?.emit("cancel-service", {
@@ -99,20 +323,8 @@ const MapScreen: React.FC = () => {
     setAlertVisible(true);
   };
 
-  useEffect(() => {
-    (async () => {
-      console.log('coords', coords);
-      if (technician && technician.location && coords) {
-        setRouteCoordinates([technician.location, coords])
-        await fetchDuration(technician.location, coords);
-      } else {
-        setErrorMsg('Coordinates not available');
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const fetchDuration = async (origin: Coords,destination: Coords) => {
+  const fetchDuration = useCallback(async (origin: Coords, destination: Coords) => {
+    if (!origin || !destination) return;
     try {
       const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_API_KEY}`;
       const response = await fetch(url);
@@ -136,7 +348,16 @@ const MapScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (technician?.location && coords) {
+      setRouteCoordinates([technician.location, coords]);
+      fetchDuration(technician.location, coords);
+    } else {
+      setLoading(false);
+    }
+  }, [technician, coords, fetchDuration]);
 
   if (!coords) {
     return <Text>Loading location...</Text>;
@@ -151,8 +372,19 @@ const MapScreen: React.FC = () => {
     showModal("Job Complete!", `Please rate ${technician?.firstName}'s work`)
   };
 
-  const handleRate = (value: number) => {
+  const handleRate = async (value: number) => {
     setRating(value);
+  };
+
+  const submitRating = async () => {
+    if (technician?.id && user?.jobs[user.jobs.length-1]?.id) {
+      await review(technician.id, user.jobs[user.jobs.length-1].id, rating);
+      setModalVisible(false)
+      setTechnician(null)
+      router.replace("/")
+    } else {
+      console.error("Technician ID or Job ID is undefined");
+    }
   };
 
   const renderStars = (rating: number) => {
@@ -174,7 +406,7 @@ const MapScreen: React.FC = () => {
       <View style={styles.ratingContainer}>
           <Text style={styles.ratingNumber}>{rating.toFixed(1)}</Text>
           <View style={styles.starsContainer}>{stars}</View>
-          <Text style={styles.ratings}> (300)</Text>
+          <Text style={styles.ratings}> ({technician?.reviews})</Text>
       </View>
     );
   };
@@ -205,13 +437,11 @@ const MapScreen: React.FC = () => {
 
   useEffect(() => {
     if (technician) {
-      // Find the peer technician by matching the userId with the technician's firstName
       const updatedTechnician = peerLocations.find(
         (peer) => peer.socketId === technician.socketId
       );
   
       if (updatedTechnician) {
-        // Update only the location field
         setTechnician({
           ...technician,
           location: updatedTechnician.location ? {
@@ -220,7 +450,6 @@ const MapScreen: React.FC = () => {
           } : technician.location,
         });
   
-        // If a new location exists, fetch the duration based on that location
         if (updatedTechnician.location) {
           fetchDuration(
             { latitude: updatedTechnician.location.latitude, longitude: updatedTechnician.location.longitude },
@@ -281,7 +510,7 @@ const MapScreen: React.FC = () => {
             longitude: technician?.location?.longitude ?? 0,
           }}
           destination={{latitude: coords?.latitude ?? 0, longitude: coords?.longitude ?? 0}}
-          apikey={GOOGLE_MAPS_API_KEY}
+          apikey={GOOGLE_MAPS_API_KEY || ''}
           strokeWidth={4}
           strokeColor={colors.primary}
         />
@@ -317,8 +546,6 @@ const MapScreen: React.FC = () => {
                 <Text style={styles.buttonText}>The work is complete</Text>
             </TouchableOpacity>
         )}
-        
-        
       </View>
 
       {/* Modal for alerts */}
@@ -345,9 +572,7 @@ const MapScreen: React.FC = () => {
                   <TouchableOpacity
                       style={styles.modalButton}
                       onPress={() => {
-                        setModalVisible(false)
-                        setTechnician(null)
-                        router.replace("/")
+                        submitRating()
                       }}
                   >
                       <Text style={styles.modalButtonText}>Submit</Text>
@@ -376,6 +601,55 @@ const MapScreen: React.FC = () => {
                   </TouchableOpacity>
               </View>
           </View>
+      </Modal>
+
+      {/* Modal for Calls */}
+      <Modal visible={callModalVisible} transparent={true} animationType="slide">
+        <View style={styles.callModalContainer}>
+          <View style={styles.callModalContent}>
+            {isCalling && !inCall && !incomingCall && (
+              <>
+              <Text style={styles.callModalText}>Calling {technician?.firstName}</Text>
+              <Image source={{ uri: technician?.photo }} style={styles.callPhoto} />
+              <TouchableOpacity style={styles.callModalButton} onPress={cancelCall}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              </>
+            )}
+            {inCall && !incomingCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {technician?.firstName}</Text>
+                <Image source={{ uri: technician?.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && inCall && (
+              <>
+                <Text style={styles.callModalText}>In call with {incomingCall.senderData.firstName }</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                  <Text style={styles.buttonText}>End Call</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {incomingCall && !inCall && (
+              <>
+                <Text style={styles.callModalText}>Incoming call from {incomingCall.senderData.firstName}</Text>
+                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <View style={{ flexDirection: "row", gap: 50 }}>
+                  <TouchableOpacity style={styles.callModalButton} onPress={acceptCall}>
+                    <Text style={styles.buttonText}>Accept Call</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.callModalButton} onPress={rejectCall}>
+                    <Text style={styles.buttonText}>Reject Call</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
       </Modal>
     </GestureHandlerRootView>
   );
@@ -548,6 +822,34 @@ const styles = StyleSheet.create({
   modalButtonText: {
       color: '#fff',
       fontWeight: 'bold',
+  },
+  callModalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  callModalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    width: "90%",
+  },
+  callModalText: {
+    fontSize: 25,
+  },
+  callModalButton: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    marginVertical: 5,
+    borderRadius: 5,
+  },
+  callPhoto: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginVertical: 80,
   },
 });
 

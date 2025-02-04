@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput, FlatList, Image } from "react-native";
 import * as Location from "expo-location";
 import { Link, useRouter } from "expo-router";
@@ -9,8 +9,10 @@ import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BlurView } from "expo-blur";
 import { useTechnician } from "@/app/context/TechnicianContext";
+import { Audio } from 'expo-av';
+import Constants from "expo-constants";
 
-const GOOGLE_MAPS_API_KEY = '';
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 interface Category {
   id: number;
@@ -18,6 +20,9 @@ interface Category {
 }
 
 export default function Index() {
+  const [locationPermission, setLocationPermission] = useState(false);
+  const [microphonePermission, setMicrophonePermission] = useState(false);
+
   const { user, loading } = useAuth();
   const [categories, setCategories] = useState<Category[]>();
   const [city, setCity] = useState<string | null>(null);
@@ -32,168 +37,134 @@ export default function Index() {
   const { coords, setCoords, address, setAddress } = useCoords();
   const { technician } = useTechnician();
 
-  const categoryImages: { [key: string]: any } = {
-    car: require('../../../assets/icons/Car.png'),
-    home: require('../../../assets/icons/HouseLine.png'),
-    business: require('../../../assets/icons/BuildingOffice.png'),
-  };
+  const categoryImages: { [key: string]: any } = useMemo(
+    () => ({
+      car: require("../../../assets/icons/Car.png"),
+      home: require("../../../assets/icons/HouseLine.png"),
+      business: require("../../../assets/icons/BuildingOffice.png"),
+    }),
+    []
+  );
 
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace("/auth/login");
-      } else {
-        // console.log("Logging user from index", user);
-      }
-    }
-  }, [user, loading]);
-
-  useEffect(() => {
-    if (!loading) {
-      if (technician) {
-        router.replace("/(tabs)/(root)/contact/map");
-      }
-    }
-  }, [user, loading]);
-
-  useEffect(() => {
-    const fetchServices = async () => {
+  useEffect(() => { // Request permissions
+    (async () => {
       try {
-        const response = await fetch('http://10.0.2.2:3000/categories');
-        if (!response.ok) {
-          throw new Error(`Error: ${response.status}`);
-        }
-        const result = await response.json();
-        setCategories(result);
-      } catch (err: any) {
-        setCategories([
-          {
-              "id": 1,
-              "name": "Car",
-          },
-          {
-              "id": 2,
-              "name": "Home",
-          },
-          {
-              "id": 3,
-              "name": "Business",
-          },
-      ])
-        // console.log(err.message);
-      }
-    };
+        const locationStatus = await Location.requestForegroundPermissionsAsync();
+        setLocationPermission(locationStatus.status === "granted");
 
-    fetchServices();
+        const microphoneStatus = await Audio.requestPermissionsAsync();
+        setMicrophonePermission(microphoneStatus.status === "granted");
+      } catch (error) {
+        console.error("Error requesting permissions:", error);
+      }
+    })();
   }, []);
 
-  const fetchAddress = async (latitude: number, longitude: number) => {
-    console.log(GOOGLE_MAPS_API_KEY); // PENDING
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
+  useEffect(() => {
+    if (!loading && !user) router.replace("/auth/login");
+    if (!loading && technician) router.replace("/(tabs)/(root)/contact/map");
+  }, [user, loading, technician]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/categories`);
+        if (!response.ok) throw new Error(`Error: ${response.status}`);
+
+        const result = await response.json();
+        setCategories(result);
+      } catch {
+        setCategories([
+          { id: 1, name: "Car" },
+          { id: 2, name: "Home" },
+          { id: 3, name: "Business" },
+        ]);
+      }
+    })();
+  }, []);
+
+  const fetchAddress = useCallback(async (latitude: number, longitude: number) => {
     try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
       const response = await fetch(url);
       const data = await response.json();
 
-      if (data.status === 'OK' && data.results.length > 0) {
-        const formattedAddress = data.results[0].formatted_address.split(', ')[0];
-        const addressComponents = data.results[0].address_components;
+      if (data.status === "OK" && data.results.length > 0) {
+        const formattedAddress = data.results[0].formatted_address.split(", ")[0];
+        let city = "",
+          country = "";
 
-        let city = '';
-        let country = '';
-
-        addressComponents?.forEach((component: any) => {
-          if (component.types.includes('locality')) {
-            city = component.long_name;
-          }
-          if (component.types.includes('country')) {
-            country = component.long_name;
-          }
+        data.results[0].address_components.forEach((component: any) => {
+          if (component.types.includes("locality")) city = component.long_name;
+          if (component.types.includes("country")) country = component.long_name;
         });
 
         setCity(city);
         setCountry(country);
-
-        console.log(formattedAddress);
-        console.log(city, country);
         setAddress(formattedAddress);
       } else {
-        console.error('Geocoding error:', data.status);
-        setAddress('No address found');
+        setAddress("No address found");
       }
-    } catch (error) {
-      console.error("Error fetching address:", error);
+    } catch {
       setErrorMsg("Failed to fetch address");
     }
-  };
-
-  useEffect(() => {
-    setLoadinglocation(true)
-    const getLocation = async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status !== 'granted') {
-          Alert.alert('Permission Denied', 'Location access is required to fetch the address.');
-          return;
-        }
-
-        const locationResult = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = locationResult.coords;
-        // setCoords({ latitude, longitude });
-        setCoords({ latitude: 6.207326920022623, longitude: -75.57076466673648 });
-
-        fetchAddress(latitude, longitude);
-      } catch (error) {
-        console.error("Error getting location:", error);
-      }
-    };
-    getLocation();
-    setLoadinglocation(false)
   }, []);
 
-  const searchAddress = async (query: string) => {
-    if (!query) return setSearchAddressResults([]);
-    if (query.length < 3) return;
+  useEffect(() => {
+    (async () => {
+      try {
+        const locationResult = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = locationResult.coords;
+        console.log(coords)
+        // setCoords({ latitude, longitude });
+        setCoords({"latitude": 6.2074576, "longitude": -75.5708091});
 
-    try {
-      query = `${query} ${city}, ${country}`
-      const url = `http://localhost:3001/autocomplete?query=${query}`;
-      const response = await fetch(url);
-      const data = await response.json();
+        fetchAddress(latitude, longitude);
+      } catch {
+        console.error("Error getting location");
+      } finally {
+        setLoadinglocation(false)
+      }
+    })();
+  }, [fetchAddress]);
 
-      if (data.status === 'OK') {
-        setSearchAddressResults(data.predictions);
-      } else {
-        console.error('No results found:', data.status);
+  const searchAddress = useCallback(
+    async (query: string) => {
+      if (!query || query.length < 3) return setSearchAddressResults([]);
+
+      try {
+        const searchQuery = `${query} ${city}, ${country}`;
+        const url = `${Constants.expoConfig?.extra?.expoPublic?.USER_SERVER}/autocomplete?query=${searchQuery}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.status === "OK") setSearchAddressResults(data.predictions);
+        else setSearchAddressResults([]);
+      } catch {
         setSearchAddressResults([]);
       }
-    } catch (error) {
-      console.error('Error searching address:', error);
-      setSearchAddressResults([]);
-    }
-  };
+    },
+    [city, country]
+  );
 
-  const fetchCoordinates = async (address: string) => {
+  const fetchCoordinates = useCallback(async (address: string) => {
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${GOOGLE_MAPS_API_KEY}`;
       const response = await fetch(url);
       const data = await response.json();
 
-      if (data.status === 'OK') {
-        const location = data.results[0].geometry.location;
-        setCoords(location);
-        console.log('Coordinates:', location);
+      if (data.status === "OK") {
+        setCoords(data.results[0].geometry.location);
+        setAddress(address);
       } else {
-        console.error('Geocoding error:', data.status);
+        setErrorMsg("Failed to fetch coordinates");
       }
-    } catch (error) {
-      console.error('Error fetching coordinates:', error);
+    } catch {
+      console.error("Error fetching coordinates");
     }
-  };
+  }, []);
 
   const selectAddress = (address: string) => {
-    setAddress(address);
     setSearchAddressResults([]);
     fetchCoordinates(address);
     setIsEditing(false);
@@ -214,10 +185,9 @@ export default function Index() {
         <Text>Loading...</Text>
       ) : (
       <MapView
-        onPress={() => setIsEditing(false)}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
-        initialRegion={{
+        region={{
           latitude: coords?.latitude || 0,
           longitude: coords?.longitude || 0,
           latitudeDelta: 0.0112,
@@ -247,15 +217,27 @@ export default function Index() {
           {errorMsg ? (
             <Text style={styles.error}>{errorMsg}</Text>
           ) : coords ? isEditing ? (
-          <TextInput
-            placeholder="Search for an address"
-            value={searchAddressQuery}
-            onChangeText={(text) => {
-              setSearchAddressQuery(text);
-              searchAddress(text);
-            }}
-            style={styles.addressInput}
-          />
+          <View style={styles.searchAddressContainer}>
+            <TextInput
+              placeholder="Search for an address"
+              value={searchAddressQuery}
+              onChangeText={(text) => {
+                setSearchAddressQuery(text);
+                searchAddress(text);
+              } }
+              style={styles.addressInput}
+            />
+            <TouchableOpacity onPress={() => {
+                  setIsEditing(false)
+                  // console.log("editing false")
+                }
+              }>
+              <Image
+              source={require('../../../assets/icons/close.png')}
+              style={styles.closeAddressInput}
+            />
+            </TouchableOpacity>
+          </View>
           ) : (
           <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.addressRow}>
             <Text style={styles.address} numberOfLines={1} ellipsizeMode="tail">{address}
@@ -285,7 +267,7 @@ export default function Index() {
         {/* Service List in ScrollView */}
         <ScrollView contentContainerStyle={styles.servicesContainer}>
           <Text style={styles.chooseService}>Choose your service</Text>
-          {/* Only display services if available */}
+          {/* Only display categories if available */}
           {categories && categories.length > 0 ? (
             <>
               {categories.map((category) => (
@@ -297,11 +279,13 @@ export default function Index() {
                   key={category.id}
                   style={styles.categoryButton}
                 >
-                  <Image
-                    source={categoryImages[category.name.toLowerCase().replace(/\s+/g, '')]}
-                    style={styles.categoryImage}
-                  />
-                  <Text style={styles.categoryText}>{category.name}</Text>
+                  <View style={styles.categoryContent}>
+                    <Image
+                      source={categoryImages[category.name.toLowerCase().replace(/\s+/g, '')]}
+                      style={styles.categoryImage}
+                    />
+                    <Text style={styles.categoryText}>{category.name}</Text>
+                  </View>
                 </Link>
               ))}
             </>
@@ -378,7 +362,7 @@ const styles = StyleSheet.create({
   address: {
     fontSize: 16,
     textAlign: "center",
-    maxWidth: 400,
+    maxWidth: 300,
     overflow: "hidden",
   },
   changeAddress: {
@@ -386,13 +370,15 @@ const styles = StyleSheet.create({
     right: 10,
     marginTop: 10,
   },
+  searchAddressContainer: {
+    width: "100%",
+  },
   addressInput: {
     width: "100%",
     height: 33,
     borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: 10,
-    paddingLeft: 8,
     fontSize: 16,
     padding: 5,
     paddingHorizontal: 10,
@@ -400,20 +386,25 @@ const styles = StyleSheet.create({
   },
   addressSuggestions: {
     position: 'absolute',
+    width: "100%",
     top: 90,
     padding: 8,
     fontSize: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: colors.primary,
     borderRadius: 10,
-    // backgroundColor: '#fff',
+    backgroundColor: '#fff',
   },
   suggestion: {
     padding: 8,
     fontSize: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-    // backgroundColor: '#fff',
+    borderBottomColor: colors.primary,
+  },
+  closeAddressInput: {
+    position: "absolute",
+    right: 10,
+    bottom: 4,
   },
   error: {
     fontSize: 16,
@@ -431,16 +422,23 @@ const styles = StyleSheet.create({
   },
   categoryButton: {
     width: "90%",
-    padding: 15,
+    alignItems: "center", 
+    justifyContent: "center",
     marginVertical: 8,
+  },
+  categoryContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    padding: 15,
     backgroundColor: colors.primary,
     borderRadius: 50,
-    textAlign: "center",
   },
   categoryImage: {
     width: 20,
-    height: 20,
-    marginRight: 10,
+    height: 15,
   },
   categoryText: {
     color: "#fff",
@@ -450,12 +448,12 @@ const styles = StyleSheet.create({
   loading: {
     flex: 1,
     width: "100%",
-    backgroundColor: colors.primary,
+    backgroundColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   logo: {
     width: "80%",
-    height: "30%",
+    resizeMode: 'contain',
   }
 });

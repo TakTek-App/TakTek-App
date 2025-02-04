@@ -7,26 +7,8 @@ import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
   const { user } = useAuth();
-  const [photo, setPhoto] = useState(require('../../assets/images/Default_pfp.jpg'));
   const router = useRouter();
   const pathname = usePathname();
-
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    if (user?.photo && isValidUrl(user.photo)) {
-      setPhoto({ uri: user.photo });
-    } else {
-      setPhoto(require('../../assets/images/Default_pfp.jpg'));
-    }
-  }, [user]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -52,7 +34,7 @@ const Header = () => {
           )}
           <Link href="/(tabs)/profile" style={pathname.includes("map") && styles.profileImageMap}>
             <Image
-              source={photo}
+              source={{ uri: user?.photo }}
               style={styles.profileImage}
             />
           </Link>

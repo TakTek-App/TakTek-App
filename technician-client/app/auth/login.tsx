@@ -35,7 +35,7 @@ const LoginScreen = () => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContainer}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Sign In</Text>
@@ -86,29 +86,29 @@ const LoginScreen = () => {
                         </Link>
                     </Text>
                 </View>
-            </ScrollView>
             
-            {/* Modal for alerts */}
-            <Modal
-                visible={modalVisible}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setModalVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                        <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                        <TouchableOpacity
-                            style={styles.modalButton}
-                            onPress={() => setModalVisible(false)}
-                        >
-                            <Text style={styles.modalButtonText}>Close</Text>
-                        </TouchableOpacity>
+                {/* Modal for alerts */}
+                <Modal
+                    visible={modalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setModalVisible(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+                            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+                            <TouchableOpacity
+                                style={styles.modalButton}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text style={styles.modalButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
-            </Modal>
-        </SafeAreaView>
+                </Modal>
+            </ScrollView>
+        </View>
     );
 };
 
@@ -138,14 +138,15 @@ const styles = StyleSheet.create({
     },
     logo: {
         width: "70%",
-        marginTop: 90,
+        height: "40%",
+        resizeMode: 'contain',
+        marginTop: 20,
     },
     technician: {
         color: colors.text,
         fontSize: 16,
         fontWeight: 500,
-        marginBottom: 90,
-        paddingLeft: 40
+        marginBottom: 20,
     },
     label: {
         width: "90%",

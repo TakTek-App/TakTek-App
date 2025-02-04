@@ -8,9 +8,10 @@ import {
     TextInput,
     TouchableOpacity,
     ScrollView,
+    Modal,
 } from 'react-native';
 import colors from '../../assets/colors/theme';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 
 const messages = [
@@ -38,24 +39,11 @@ const SupportScreen = () => {
     const { technician } = useAuth();
     const [chatMessages, setChatMessages] = useState(messages);
     const [inputMessage, setInputMessage] = useState('');
-    const [ photo, setPhoto ] = useState(require('../../assets/images/Default_pfp.jpg'))
+    const [ photo, setPhoto ] = useState({ uri: technician?.photo || '' })
+    const [modalVisible, setModalVisible] = useState(true);
+    const [modalContent, setModalContent] = useState({ title: 'Support is not available', message: 'We are working on it' });
 
-    const isValidUrl = (url: string) => {
-      try {
-          new URL(url);
-          return true;
-      } catch (e) {
-          return false;
-      }
-    };
-
-    useEffect(() => {
-      if (technician?.photo && isValidUrl(technician.photo)) {
-          setPhoto({ uri: technician.photo });
-      } else {
-          setPhoto(require('../../assets/images/Default_pfp.jpg'));
-      }
-    }, [technician]);
+    const router = useRouter();
 
     const handleSend = () => {
         if (inputMessage.trim() === '') return;
@@ -70,6 +58,15 @@ const SupportScreen = () => {
         setChatMessages([...chatMessages, newMessage]);
         setInputMessage('');
     };
+
+    const showModal = (title: string, message: string) => {
+      setModalContent({ title, message });
+      setModalVisible(true);
+    };
+
+    useEffect(()=> {
+      showModal('Support is not available', 'We are working on it')
+    }, [])
 
     return (
       <SafeAreaView style={styles.container}>
@@ -135,26 +132,48 @@ const SupportScreen = () => {
             </View>
           ))}
         </ScrollView>
-          {/* Input Area */}
-          <View style={styles.inputContainer}>
-              <TextInput
-                  style={styles.textInput}
-                  placeholder="Type message"
-                  placeholderTextColor={colors.border}
-                  value={inputMessage}
-                  onChangeText={setInputMessage}
-              />
-              <TouchableOpacity style={styles.micButton}>
-                  <Image
-                      source={require('../../assets/icons/Mic.png')}
-                  />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                  <Image
-                      source={require('../../assets/icons/Send.png')}
-                  />
-              </TouchableOpacity>
+
+        {/* Input Area */}
+        <View style={styles.inputContainer}>
+            <TextInput
+                style={styles.textInput}
+                placeholder="Type message"
+                placeholderTextColor={colors.border}
+                value={inputMessage}
+                onChangeText={setInputMessage}
+            />
+            <TouchableOpacity style={styles.micButton}>
+                <Image
+                    source={require('../../assets/icons/Mic.png')}
+                />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                <Image
+                    source={require('../../assets/icons/Send.png')}
+                />
+            </TouchableOpacity>
+        </View>
+
+        {/* Modal for alerts */}
+        <Modal
+            visible={modalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => router.replace("/")}
+        >
+          <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>{modalContent.title}</Text>
+                  <Text style={styles.modalMessage}>{modalContent.message}</Text>
+                  <TouchableOpacity
+                      style={styles.modalButton}
+                      onPress={() => router.replace("/")}
+                  >
+                      <Text style={styles.modalButtonText}>Close</Text>
+                  </TouchableOpacity>
+              </View>
           </View>
+        </Modal>
       </SafeAreaView>
     );
 };
@@ -274,6 +293,43 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     right: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  modalContent: {
+      width: '90%',
+      backgroundColor: '#fff',
+      borderRadius: 15,
+      paddingVertical: 20,
+      alignItems: 'center',
+  },
+  modalTitle: {
+      fontSize: 22,
+      fontWeight: 500,
+      color: '#000',
+      marginBottom: 10,
+  },
+  modalMessage: {
+      fontSize: 15,
+      color: '#000',
+      textAlign: 'center',
+      marginBottom: 20,
+      width: "90%",
+  },
+  modalButton: {
+      backgroundColor: colors.primary,
+      padding: 10,
+      borderRadius: 50,
+      width: '90%',
+      alignItems: 'center',
+  },
+  modalButtonText: {
+      color: '#fff',
+      fontWeight: 'bold',
   },
 });
 
