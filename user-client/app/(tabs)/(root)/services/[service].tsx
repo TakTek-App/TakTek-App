@@ -264,7 +264,7 @@ export default function ServiceScreen() {
   const startCall = async () => {
     if (!localStream || !selectedTechnician) return;
 
-    const peerConnection = createPeerConnection(selectedTechnician.companyId); // companyId or socketID
+    const peerConnection = createPeerConnection("santizapata"); // companyId or socketID
 
     localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
 
@@ -276,7 +276,7 @@ export default function ServiceScreen() {
       const offer = await peerConnection.createOffer(offerOptions);
       await peerConnection.setLocalDescription(offer);
 
-      socket?.emit("offer", { target: selectedTechnician.companyId, offer }); // companyId or socketID
+      socket?.emit("offer", { target: "santizapata", offer }); // companyId or socketID
       peerConnectionRef.current = peerConnection;
 
       setIsCalling(true);

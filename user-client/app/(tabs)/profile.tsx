@@ -113,7 +113,8 @@ const ProfileScreen = () => {
 
                 <Text style={styles.label}>Email</Text>
                 <TextInput
-                    style={styles.input}
+                    editable={false}
+                    style={styles.disabledInput}
                     placeholder="Enter your email"
                     value={email}
                     onChangeText={text => { setEmail(text); handleChange(); }}

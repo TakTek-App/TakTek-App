@@ -6,13 +6,14 @@ export default ({config}: ConfigContext): ExpoConfig => ({
   "slug": "technician-client",
   "version": "1.0.0",
   "orientation": "portrait",
-  "icon": "./assets/images/Icon IOS 1024x1024.png",
+  "icon": "./assets/images/Icon IOS 1024x1024_blanco.jpg",
   "scheme": "myapp",
   "userInterfaceStyle": "automatic",
   "newArchEnabled": true,
   "ios": {
     "supportsTablet": true,
-    "icon": "./assets/images/Icon IOS 1024x1024.png",
+    "bundleIdentifier": "com.samuelgeeks5g.taktektechnicians",
+    "icon": "./assets/images/Icon IOS 1024x1024_blanco.jpg",
     "infoPlist": {
       "NSLocationWhenInUseUsageDescription": "This app needs access to your location.",
       "NSMicrophoneUsageDescription": "This app needs access to your microphone."
@@ -55,6 +56,9 @@ export default ({config}: ConfigContext): ExpoConfig => ({
       "GOOGLE_MAPS_API_KEY": process.env.GOOGLE_MAPS_API_KEY,
       "SIGNALING_SERVER": process.env.SIGNALING_SERVER,
       "DB_SERVER": process.env.DB_SERVER
-    }
+    },
+    "eas": {
+      "projectId": "62a8e632-c130-4a7b-8020-ab03409c552e"
+    },
   },
 })
