@@ -1,18 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Text, View, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput, FlatList, Image } from "react-native";
+import {
+  Text,
+  View,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  TextInput,
+  FlatList,
+  Image,
+  Platform,
+} from "react-native";
 import * as Location from "expo-location";
 import { Link, useRouter } from "expo-router";
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from "../../context/AuthContext";
 import { useCoords } from "../../context/CoordsContext";
 import colors from "../../../assets/colors/theme";
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BlurView } from "expo-blur";
 import { useTechnician } from "@/app/context/TechnicianContext";
-import { Audio } from 'expo-av';
+import { Audio } from "expo-av";
 import Constants from "expo-constants";
 
-const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_API_KEY =
+  Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 interface Category {
   id: number;
@@ -28,7 +41,7 @@ export default function Index() {
   const [city, setCity] = useState<string | null>(null);
   const [country, setCountry] = useState<string | null>(null);
   const [loadingLocation, setLoadinglocation] = useState(true);
-  const [searchAddressQuery, setSearchAddressQuery] = useState<string>('');
+  const [searchAddressQuery, setSearchAddressQuery] = useState<string>("");
   const [searchAddressResults, setSearchAddressResults] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -46,10 +59,12 @@ export default function Index() {
     []
   );
 
-  useEffect(() => { // Request permissions
+  useEffect(() => {
+    // Request permissions
     (async () => {
       try {
-        const locationStatus = await Location.requestForegroundPermissionsAsync();
+        const locationStatus =
+          await Location.requestForegroundPermissionsAsync();
         setLocationPermission(locationStatus.status === "granted");
 
         const microphoneStatus = await Audio.requestPermissionsAsync();
@@ -68,7 +83,9 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/categories`);
+        const response = await fetch(
+          `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/categories`
+        );
         if (!response.ok) throw new Error(`Error: ${response.status}`);
 
         const result = await response.json();
@@ -83,47 +100,53 @@ export default function Index() {
     })();
   }, []);
 
-  const fetchAddress = useCallback(async (latitude: number, longitude: number) => {
-    try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
-      const response = await fetch(url);
-      const data = await response.json();
+  const fetchAddress = useCallback(
+    async (latitude: number, longitude: number) => {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-      if (data.status === "OK" && data.results.length > 0) {
-        const formattedAddress = data.results[0].formatted_address.split(", ")[0];
-        let city = "",
-          country = "";
+        if (data.status === "OK" && data.results.length > 0) {
+          const formattedAddress =
+            data.results[0].formatted_address.split(", ")[0];
+          let city = "",
+            country = "";
 
-        data.results[0].address_components.forEach((component: any) => {
-          if (component.types.includes("locality")) city = component.long_name;
-          if (component.types.includes("country")) country = component.long_name;
-        });
+          data.results[0].address_components.forEach((component: any) => {
+            if (component.types.includes("locality"))
+              city = component.long_name;
+            if (component.types.includes("country"))
+              country = component.long_name;
+          });
 
-        setCity(city);
-        setCountry(country);
-        setAddress(formattedAddress);
-      } else {
-        setAddress("No address found");
+          setCity(city);
+          setCountry(country);
+          setAddress(formattedAddress);
+        } else {
+          setAddress("No address found");
+        }
+      } catch {
+        setErrorMsg("Failed to fetch address");
       }
-    } catch {
-      setErrorMsg("Failed to fetch address");
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     (async () => {
       try {
         const locationResult = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = locationResult.coords;
-        console.log(coords)
-        // setCoords({ latitude, longitude });
-        setCoords({"latitude": 6.2074576, "longitude": -75.5708091});
+        console.log(coords);
+        setCoords({ latitude, longitude });
+        // setCoords({ latitude: 6.2074576, longitude: -75.5708091 });
 
         fetchAddress(latitude, longitude);
       } catch {
         console.error("Error getting location");
       } finally {
-        setLoadinglocation(false)
+        setLoadinglocation(false);
       }
     })();
   }, [fetchAddress]);
@@ -173,7 +196,10 @@ export default function Index() {
   if (loading) {
     return (
       <View style={styles.loading}>
-        <Image source={require("../../../assets/images/logo-white.png")} style={styles.logo} />
+        <Image
+          source={require("../../../assets/images/logo-white.png")}
+          style={styles.logo}
+        />
       </View>
     );
   }
@@ -184,85 +210,102 @@ export default function Index() {
       {loadingLocation ? (
         <Text>Loading...</Text>
       ) : (
-      <MapView
-        style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        region={{
-          latitude: coords?.latitude || 0,
-          longitude: coords?.longitude || 0,
-          latitudeDelta: 0.0112,
-          longitudeDelta: 0.0121,
-        }}
-      >
-        <Marker
-          coordinate={{
+        <MapView
+          style={styles.map}
+          provider={PROVIDER_GOOGLE}
+          region={{
             latitude: coords?.latitude || 0,
             longitude: coords?.longitude || 0,
+            latitudeDelta: 0.0112,
+            longitudeDelta: 0.0121,
           }}
-          title="Current Location"
         >
-          <Image
-            source={require("../../../assets/icons/Location_icon.png")}
-            style={styles.currentLocationPin}
-            resizeMode="contain"
-          />
-        </Marker>
-      </MapView>)} 
+          <Marker
+            coordinate={{
+              latitude: coords?.latitude || 0,
+              longitude: coords?.longitude || 0,
+            }}
+            title="Current Location"
+          >
+            <Image
+              source={require("../../../assets/icons/Location_icon.png")}
+              style={styles.currentLocationPin}
+              resizeMode="contain"
+            />
+          </Marker>
+        </MapView>
+      )}
 
       {/* Bottom Sheet */}
       <View style={styles.bottomSheet}>
         {/* Address Container */}
-        <BlurView style={styles.addressContainer}>
-          <Text style={styles.addressTitle}>It looks like you need a service in</Text>
+        <BlurView intensity={100} tint="light" style={styles.addressContainer}>
+          <Text style={styles.addressTitle}>
+            It looks like you need a service in
+          </Text>
           {errorMsg ? (
             <Text style={styles.error}>{errorMsg}</Text>
-          ) : coords ? isEditing ? (
-          <View style={styles.searchAddressContainer}>
-            <TextInput
-              placeholder="Search for an address"
-              value={searchAddressQuery}
-              onChangeText={(text) => {
-                setSearchAddressQuery(text);
-                searchAddress(text);
-              } }
-              style={styles.addressInput}
-            />
-            <TouchableOpacity onPress={() => {
-                  setIsEditing(false)
-                  // console.log("editing false")
-                }
-              }>
-              <Image
-              source={require('../../../assets/icons/close.png')}
-              style={styles.closeAddressInput}
-            />
-            </TouchableOpacity>
-          </View>
+          ) : coords ? (
+            isEditing ? (
+              <View style={styles.searchAddressContainer}>
+                <TextInput
+                  placeholder="Search for an address"
+                  value={searchAddressQuery}
+                  onChangeText={(text) => {
+                    setSearchAddressQuery(text);
+                    searchAddress(text);
+                  }}
+                  style={styles.addressInput}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsEditing(false);
+                    // console.log("editing false")
+                  }}
+                >
+                  <Image
+                    source={require("../../../assets/icons/close.png")}
+                    style={styles.closeAddressInput}
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setIsEditing(true)}
+                style={styles.addressRow}
+              >
+                <Text
+                  style={styles.address}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {address}
+                </Text>
+                <Image
+                  source={require("../../../assets/icons/edit.png")}
+                  style={styles.changeAddress}
+                />
+              </TouchableOpacity>
+            )
           ) : (
-          <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.addressRow}>
-            <Text style={styles.address} numberOfLines={1} ellipsizeMode="tail">{address}
-            </Text>
-            <Image
-                source={require('../../../assets/icons/edit.png')}
-                style={styles.changeAddress}
-            />
-          </TouchableOpacity>
-          ) : (
-          <Text style={styles.address}>Your Location: Awaiting...</Text>
-        )}
+            <Text style={styles.address}>Your Location: Awaiting...</Text>
+          )}
+        </BlurView>
 
         {isEditing && searchAddressResults.length > 0 && (
-          <FlatList style={styles.addressSuggestions}
+          <FlatList
+            style={styles.addressSuggestions}
             data={searchAddressResults}
             keyExtractor={(item) => item.place_id}
             renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => selectAddress(item.description)}>
+              <TouchableOpacity
+                onPress={() => selectAddress(item.description)}
+              >
                 <Text style={styles.suggestion}>{item.description}</Text>
               </TouchableOpacity>
             )}
           />
         )}
-        </BlurView>
 
         {/* Service List in ScrollView */}
         <ScrollView contentContainerStyle={styles.servicesContainer}>
@@ -281,7 +324,11 @@ export default function Index() {
                 >
                   <View style={styles.categoryContent}>
                     <Image
-                      source={categoryImages[category.name.toLowerCase().replace(/\s+/g, '')]}
+                      source={
+                        categoryImages[
+                          category.name.toLowerCase().replace(/\s+/g, "")
+                        ]
+                      }
                       style={styles.categoryImage}
                     />
                     <Text style={styles.categoryText}>{category.name}</Text>
@@ -324,17 +371,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 5,
-    maxHeight: "35%",
+    height: "35%",
   },
   addressContainer: {
     position: "absolute",
     top: -100,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: Platform.OS === "ios" ? "transparent": "rgba(255, 255, 255, 0.5)",
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: "#fff",
+    overflow: "hidden",
     padding: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -346,7 +394,7 @@ const styles = StyleSheet.create({
   },
   addressTitle: {
     fontSize: 16,
-    marginBottom: 10
+    marginBottom: 10,
   },
   addressRow: {
     flexDirection: "row",
@@ -357,7 +405,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     padding: 5,
     paddingHorizontal: 10,
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
   address: {
     fontSize: 16,
@@ -382,18 +430,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     padding: 5,
     paddingHorizontal: 10,
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
   addressSuggestions: {
-    position: 'absolute',
+    zIndex: 10,
+    position: "absolute",
     width: "100%",
-    top: 90,
+    top: 0,
     padding: 8,
     fontSize: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.primary,
     borderRadius: 10,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   suggestion: {
     padding: 8,
@@ -422,7 +471,7 @@ const styles = StyleSheet.create({
   },
   categoryButton: {
     width: "90%",
-    alignItems: "center", 
+    alignItems: "center",
     justifyContent: "center",
     marginVertical: 8,
   },
@@ -454,6 +503,6 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: "80%",
-    resizeMode: 'contain',
-  }
+    resizeMode: "contain",
+  },
 });

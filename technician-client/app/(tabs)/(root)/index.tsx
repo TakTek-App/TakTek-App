@@ -1,15 +1,33 @@
-import { useAuth } from '@/app/context/AuthContext';
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, Switch, TouchableOpacity, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { useAuth } from "@/app/context/AuthContext";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  Image,
+  Switch,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import colors from "../../../assets/colors/theme";
 import * as Location from "expo-location";
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSocket } from '@/app/context/SocketContext';
-import { useClient } from '@/app/context/ClientContext';
-import { useCoords } from '@/app/context/CoordsContext';
-import { Audio } from 'expo-av';
-import { MediaStream, RTCPeerConnection,RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
+import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useSocket } from "@/app/context/SocketContext";
+import { useClient } from "@/app/context/ClientContext";
+import { useCoords } from "@/app/context/CoordsContext";
+import { Audio } from "expo-av";
+import {
+  MediaStream,
+  RTCPeerConnection,
+  RTCSessionDescription,
+  RTCIceCandidate,
+  mediaDevices,
+} from "react-native-webrtc";
 
 interface Coords {
   latitude: number;
@@ -36,24 +54,34 @@ const Main = () => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isCalling, setIsCalling] = useState(false);
   const [inCall, setInCall] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ sender: string; senderData: any } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{
+    sender: string;
+    senderData: any;
+  } | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
 
-  const { technician, loading, acceptJob, fetchTechnicianInfo, createCall, review } = useAuth();
+  const {
+    technician,
+    loading,
+    acceptJob,
+    fetchTechnicianInfo,
+    createCall,
+    review,
+  } = useAuth();
   const [connecting, setConnecting] = useState(true);
   const [available, setAvailable] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [noServicesVisible, setNoServicesVisible] = useState(false);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
-  const [modalContent, setModalContent] = useState({ title: '', message: '' });
+  const [modalContent, setModalContent] = useState({ title: "", message: "" });
   const [callModalVisible, setCallModalVisible] = useState(false);
   const [clients, setClients] = useState<Client[]>([]); //
   const [requestingClient, setRequestingClient] = useState<Client>();
   const [rating, setRating] = useState(5);
-  
-  const {client, setClient} = useClient();
+
+  const { client, setClient } = useClient();
   const { setCoords } = useCoords();
 
   const { socket, isConnected } = useSocket();
@@ -100,20 +128,21 @@ const Main = () => {
   useEffect(() => {
     const requestPermissions = async () => {
       try {
-        const locationStatus = await Location.requestForegroundPermissionsAsync();
-        if (locationStatus.status === 'granted') {
+        const locationStatus =
+          await Location.requestForegroundPermissionsAsync();
+        if (locationStatus.status === "granted") {
           setLocationPermission(true);
         } else {
           setLocationPermission(false);
-          Alert.alert('Permission Denied', 'Location access is required.');
+          Alert.alert("Permission Denied", "Location access is required.");
         }
 
         const microphoneStatus = await Audio.requestPermissionsAsync();
-        if (microphoneStatus.status === 'granted') {
+        if (microphoneStatus.status === "granted") {
           setMicrophonePermission(true);
         } else {
           setMicrophonePermission(false);
-          Alert.alert('Permission Denied', 'Microphone access is required.');
+          Alert.alert("Permission Denied", "Microphone access is required.");
         }
       } catch (error) {
         console.error("Error requesting permissions:", error);
@@ -144,8 +173,8 @@ const Main = () => {
     company: technician?.company.name,
     rating: technician?.rating,
     reviews: technician?.reviews.length,
-    services: technician?.services.map((service) => service.id)
-  }
+    services: technician?.services.map((service) => service.id),
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -158,10 +187,16 @@ const Main = () => {
   }, [technician?.id]);
 
   useEffect(() => {
+    setTimeout(() => {
+      setConnecting(false);
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
     const requestPermissions = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Permission to access location was denied');
+      if (status !== "granted") {
+        console.log("Permission to access location was denied");
         return false;
       }
       return true;
@@ -170,7 +205,7 @@ const Main = () => {
     const startLocationTracking = async () => {
       const hasPermission = await requestPermissions();
       if (!hasPermission) return;
-    
+
       Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -179,7 +214,7 @@ const Main = () => {
         },
         (location) => {
           const { latitude, longitude } = location.coords;
-          socket?.emit('send-location', { latitude, longitude });
+          socket?.emit("send-location", { latitude, longitude });
           // console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
         }
       );
@@ -188,7 +223,8 @@ const Main = () => {
     startLocationTracking();
   }, []);
 
-  useEffect(() => { //
+  useEffect(() => {
+    //
     if (!socket || !isConnected) return;
 
     setConnecting(false);
@@ -199,15 +235,19 @@ const Main = () => {
     console.log("Services:", socketPeer.services);
 
     if (socketPeer.services?.length === 0) {
-      showNoServices("No services", "You need to add services to start receiving orders.");
+      showNoServices(
+        "No services",
+        "You need to add services to start receiving orders."
+      );
     }
 
     // sendRandomLocation();
     // const interval = setInterval(sendRandomLocation, 3000);
 
-    socket?.on("peer-list", (clients: Client[]) => { //
+    socket?.on("peer-list", (clients: Client[]) => {
+      //
       setClients(clients);
-      console.log("clients", clients)
+      console.log("clients", clients);
     });
 
     socket?.on("offer", ({ offer, sender, senderData }) => {
@@ -219,16 +259,16 @@ const Main = () => {
 
     socket?.on("answer", handleAnswer);
     socket?.on("ice-candidate", handleIceCandidate);
-    socket?.on("call-rejected", ({senderData}) => {
+    socket?.on("call-rejected", ({ senderData }) => {
       resetCallState();
-      showModal("Rejected",`${senderData.firstName} rejected the call.`)
+      showModal("Rejected", `${senderData.firstName} rejected the call.`);
       setCallModalVisible(false);
       console.log("Call rejected.");
     });
 
     socket?.on("call-ended", ({ senderData }) => {
       resetCallState();
-      showModal("Ended",`${senderData.firstName} ended the call.`)
+      showModal("Ended", `${senderData.firstName} ended the call.`);
       console.log("Call ended.");
     });
 
@@ -241,7 +281,7 @@ const Main = () => {
       const constraints = { audio: true, video: false };
       try {
         const stream = await mediaDevices.getUserMedia(constraints);
-  
+
         if (stream.getAudioTracks().length === 0) {
           console.error("No audio tracks found.");
           return;
@@ -258,12 +298,12 @@ const Main = () => {
 
     socket?.on("hire-request", (clientData) => {
       setRequestingClient(clientData);
-      console.log(clientData)
+      console.log(clientData);
       setAlertVisible(true);
     });
 
     socket?.on("service-cancelled", ({ message }) => {
-      console.log(message)
+      console.log(message);
       showModal("Service Cancelled", message);
       setClient(null);
     });
@@ -310,8 +350,10 @@ const Main = () => {
     peerConnectionRef.current = peerConnection;
   };
 
-  const handleAnswer = async (answer: { answer: RTCSessionDescription } | null) => {
-    console.log(client?.socketId)
+  const handleAnswer = async (
+    answer: { answer: RTCSessionDescription } | null
+  ) => {
+    console.log(client?.socketId);
     if (answer && answer.answer) {
       const { answer: sessionDescription } = answer;
 
@@ -319,13 +361,15 @@ const Main = () => {
 
       if (peerConnectionRef.current) {
         try {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          await peerConnectionRef.current.setRemoteDescription(
+            new RTCSessionDescription(sessionDescription)
+          );
           console.log("Remote description set successfully.");
-          console.log(client?.socketId)
+          console.log(client?.socketId);
 
           setInCall(true);
           setCallModalVisible(true);
-          console.log(client?.socketId)
+          console.log(client?.socketId);
         } catch (error) {
           console.error("Error setting remote description:", error);
         }
@@ -335,11 +379,17 @@ const Main = () => {
     }
   };
 
-  const handleIceCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+  const handleIceCandidate = ({
+    candidate,
+  }: {
+    candidate: RTCIceCandidateInit;
+  }) => {
     console.log("Received ICE candidate:", candidate);
     if (peerConnectionRef.current) {
       if (peerConnectionRef.current.remoteDescription) {
-        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        peerConnectionRef.current.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
       } else {
         iceCandidateQueue.current.push(candidate);
         console.log("ICE candidate queued.");
@@ -352,14 +402,17 @@ const Main = () => {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    peerConnection.addEventListener( 'track', event => {
+    peerConnection.addEventListener("track", (event) => {
       console.log("Remote stream received", event.streams[0]);
       setRemoteStream(event.streams[0]);
     });
 
-    peerConnection.addEventListener( 'icecandidate', event => {
+    peerConnection.addEventListener("icecandidate", (event) => {
       if (event.candidate) {
-        socket?.emit("ice-candidate", { target: targetPeer, candidate: event.candidate });
+        socket?.emit("ice-candidate", {
+          target: targetPeer,
+          candidate: event.candidate,
+        });
         console.log(`ICE candidate sent to: ${targetPeer}`);
       }
     });
@@ -372,7 +425,9 @@ const Main = () => {
 
     const peerConnection = createPeerConnection(client.socketId);
 
-    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+    localStream
+      .getTracks()
+      .forEach((track) => peerConnection.addTrack(track, localStream));
 
     const offerOptions = {
       offerToReceiveAudio: 1,
@@ -395,14 +450,16 @@ const Main = () => {
 
   const acceptCall = async () => {
     if (!incomingCall || !localStream) return;
-  
+
     const peerConnection = peerConnectionRef.current!;
-  
-    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-  
+
+    localStream
+      .getTracks()
+      .forEach((track) => peerConnection.addTrack(track, localStream));
+
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
-  
+
     socket?.emit("answer", { target: incomingCall.sender, answer });
 
     if (technician?.id) {
@@ -410,7 +467,7 @@ const Main = () => {
     } else {
       console.error("Technician ID is undefined");
     }
-  
+
     setInCall(true);
     setCallModalVisible(true);
     console.log(`Call accepted with ${incomingCall.sender}`);
@@ -431,13 +488,17 @@ const Main = () => {
     }
 
     resetCallState();
-    socket?.emit("call-ended", { target: client?.socketId || incomingCall?.sender });
+    socket?.emit("call-ended", {
+      target: client?.socketId || incomingCall?.sender,
+    });
     console.log("Call ended.");
   };
 
   const cancelCall = () => {
     if (isCalling) {
-      socket?.emit("call-cancelled", { target: client?.socketId || incomingCall?.sender });
+      socket?.emit("call-cancelled", {
+        target: client?.socketId || incomingCall?.sender,
+      });
       console.log(`Call cancelled to ${client?.socketId}`);
       resetCallState();
     }
@@ -469,16 +530,29 @@ const Main = () => {
       setClient(requestingClient);
     }
     if (socketPeer.id) {
-      if (socketPeer.id && requestingClient?.id && requestingClient?.serviceId) {
-        const job = await acceptJob(socketPeer.id, requestingClient.id, requestingClient.serviceId);
-        console.log("job", job)
+      if (
+        socketPeer.id &&
+        requestingClient?.id &&
+        requestingClient?.serviceId
+      ) {
+        const job = await acceptJob(
+          socketPeer.id,
+          requestingClient.id,
+          requestingClient.serviceId
+        );
+        console.log("job", job);
       } else {
-        console.error("Failed to set up job: Missing required IDs", socketPeer.id, requestingClient?.id, requestingClient?.serviceId);
+        console.error(
+          "Failed to set up job: Missing required IDs",
+          socketPeer.id,
+          requestingClient?.id,
+          requestingClient?.serviceId
+        );
       }
     } else {
-      console.log("Failed to set up job")
+      console.log("Failed to set up job");
     }
-  }
+  };
 
   const rejectRequest = () => {
     setAlertVisible(false);
@@ -487,18 +561,22 @@ const Main = () => {
       clientId: requestingClient?.socketId,
       technicianId: socketPeer.socketId,
     });
-  }
+  };
 
   const handleRate = (value: number) => {
     setRating(value);
   };
 
   const submitRating = async () => {
-    if (client?.id && technician?.jobs[technician.jobs.length-1]?.id) {
-      await review(client.id, technician.jobs[technician.jobs.length-1].id, rating);
-      setReviewModalVisible(false)
-      setClient(null)
-      router.replace("/")
+    if (client?.id && technician?.jobs[technician.jobs.length - 1]?.id) {
+      await review(
+        client.id,
+        technician.jobs[technician.jobs.length - 1].id,
+        rating
+      );
+      setReviewModalVisible(false);
+      setClient(null);
+      router.replace("/");
     } else {
       console.error("Client ID or Job ID is undefined");
     }
@@ -509,12 +587,12 @@ const Main = () => {
     setReviewModalVisible(true);
   };
 
-  const handleReview = async() => {
-    showReviewModal("Order Completed", `Customer review`)
+  const handleReview = async () => {
+    showReviewModal("Order Completed", `Customer review`);
   };
 
   const openMap = () => {
-    router.push("/(tabs)/(root)/contact/map")
+    router.push("/(tabs)/(root)/contact/map");
   };
 
   return (
@@ -535,15 +613,17 @@ const Main = () => {
         <Text style={styles.sectionTitle}>Available for work?</Text>
         <View style={styles.availableContainer}>
           <Switch
-          style={{ transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }] }}
-          trackColor={{false: colors.red, true: colors.accentGreen}}
-          thumbColor={"#fff"}
-          ios_backgroundColor="#3e3e3e"
-          onValueChange={toggleAvailability}
-          value={available}
-        />
-          
-        <Text style={styles.available}>{available ? 'Available' : 'Busy'}</Text>
+            style={{ transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }] }}
+            trackColor={{ false: colors.red, true: colors.accentGreen }}
+            thumbColor={"#fff"}
+            ios_backgroundColor={colors.red}
+            onValueChange={toggleAvailability}
+            value={available}
+          />
+
+          <Text style={styles.available}>
+            {available ? "Available" : "Busy"}
+          </Text>
         </View>
       </View>
 
@@ -558,51 +638,77 @@ const Main = () => {
               <Text style={styles.orderContent}>{client.serviceName}</Text>
               <Text style={styles.label}>Client</Text>
               <View style={styles.clientContainer}>
-                  <Image source={{ uri: client.photo }} style={styles.clientPhoto} />
-                  <View style={styles.clientInfo}>
-                      <Text style={styles.clientName}>{client.firstName} {client.lastName}</Text>
-                  </View>
+                <Image
+                  source={{ uri: client.photo }}
+                  style={styles.clientPhoto}
+                />
+                <View style={styles.clientInfo}>
+                  <Text style={styles.clientName}>
+                    {client.firstName} {client.lastName}
+                  </Text>
+                </View>
               </View>
               <TouchableOpacity style={styles.callButton}>
-                <Image source={require("../../../assets/icons/phone.png")} style={styles.buttonIcon} />
+                <Image
+                  source={require("../../../assets/icons/phone.png")}
+                  style={styles.buttonIcon}
+                />
                 <Text style={styles.buttonText}>Call {client.firstName}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.mapButton} onPress={openMap}>
-                <Image source={require("../../../assets/icons/map.png")} style={styles.buttonIcon} />
+                <Image
+                  source={require("../../../assets/icons/map.png")}
+                  style={styles.buttonIcon}
+                />
                 <Text style={styles.mapButtonText}>Switch to Map</Text>
               </TouchableOpacity>
             </View>
-          </View>          
+          </View>
         ) : (
           <Text style={styles.noOrders}>No orders in progress.</Text>
         )}
       </View>
 
       <Modal
-          visible={alertVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setAlertVisible(false)}
+        visible={alertVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAlertVisible(false)}
       >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>New Order</Text>
             <View style={styles.orderBody}>
               <Text style={styles.label}>Address</Text>
-              <Text style={styles.orderContent}>{requestingClient?.address}</Text>
+              <Text style={styles.orderContent}>
+                {requestingClient?.address}
+              </Text>
               <Text style={styles.label}>Type of work</Text>
-              <Text style={styles.orderContent}>{requestingClient?.serviceName}</Text>
+              <Text style={styles.orderContent}>
+                {requestingClient?.serviceName}
+              </Text>
               <Text style={styles.label}>Client</Text>
               <View style={styles.clientContainer}>
-                <Image source={{ uri: requestingClient?.photo }} style={styles.clientPhoto} />
+                <Image
+                  source={{ uri: requestingClient?.photo }}
+                  style={styles.clientPhoto}
+                />
                 <View style={styles.clientInfo}>
-                  <Text style={styles.clientName}>{requestingClient?.firstName} {requestingClient?.lastName}</Text>
+                  <Text style={styles.clientName}>
+                    {requestingClient?.firstName} {requestingClient?.lastName}
+                  </Text>
                 </View>
               </View>
-              <TouchableOpacity style={styles.callButton} onPress={acceptRequest}>
+              <TouchableOpacity
+                style={styles.callButton}
+                onPress={acceptRequest}
+              >
                 <Text style={styles.buttonText}>Accept</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.rejectButton}  onPress={rejectRequest}>
+              <TouchableOpacity
+                style={styles.rejectButton}
+                onPress={rejectRequest}
+              >
                 <Text style={styles.buttonText}>Reject</Text>
               </TouchableOpacity>
             </View>
@@ -617,16 +723,16 @@ const Main = () => {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                <TouchableOpacity
-                    style={styles.modalButton}
-                    onPress={() => setModalVisible(false)}
-                >
-                    <Text style={styles.modalButtonText}>Close</Text>
-                </TouchableOpacity>
-            </View>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
@@ -637,19 +743,19 @@ const Main = () => {
         onRequestClose={() => setNoServicesVisible(false)}
       >
         <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                <TouchableOpacity
-                    style={styles.modalButton}
-                    onPress={() => {
-                      setNoServicesVisible(false)
-                      router.replace("/(tabs)/profile")
-                    }}
-                >
-                    <Text style={styles.modalButtonText}>Go to profile</Text>
-                </TouchableOpacity>
-            </View>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setNoServicesVisible(false);
+                router.replace("/(tabs)/profile");
+              }}
+            >
+              <Text style={styles.modalButtonText}>Go to profile</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
@@ -660,84 +766,128 @@ const Main = () => {
         onRequestClose={() => setReviewModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                <View style={styles.reviewStarsContainer}>
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <TouchableOpacity key={value} onPress={() => handleRate(value)}>
-                    <Image
-                      source={require('@/assets/icons/Rate_Star.png')}
-                      style={[styles.reviewStar, value > rating && styles.staro]}
-                      />
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.orderBody}>
-                <Text style={styles.label}>Address</Text>
-                <Text style={styles.orderContent}>{client?.address}</Text>
-                <Text style={styles.label}>Type of work</Text>
-                <Text style={styles.orderContent}>{client?.firstName}</Text>
-                <Text style={styles.label}>Client</Text>
-                <View style={styles.clientContainer}>
-                  <Image source={{ uri: client?.photo }} style={styles.clientPhoto} />
-                  <View style={styles.clientInfo}>
-                      <Text style={styles.clientName}>{client?.firstName} {client?.lastName}</Text>
-                  </View>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <View style={styles.reviewStarsContainer}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity key={value} onPress={() => handleRate(value)}>
+                  <Image
+                    source={require("@/assets/icons/Rate_Star.png")}
+                    style={[styles.reviewStar, value > rating && styles.staro]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.orderBody}>
+              <Text style={styles.label}>Address</Text>
+              <Text style={styles.orderContent}>{client?.address}</Text>
+              <Text style={styles.label}>Type of work</Text>
+              <Text style={styles.orderContent}>{client?.firstName}</Text>
+              <Text style={styles.label}>Client</Text>
+              <View style={styles.clientContainer}>
+                <Image
+                  source={{ uri: client?.photo }}
+                  style={styles.clientPhoto}
+                />
+                <View style={styles.clientInfo}>
+                  <Text style={styles.clientName}>
+                    {client?.firstName} {client?.lastName}
+                  </Text>
                 </View>
               </View>
-                <TouchableOpacity
-                    style={styles.modalButton}
-                    onPress={() => {
-                      submitRating()
-                    }}
-                >
-                  <Text style={styles.modalButtonText}>Submit</Text>
-                </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                submitRating();
+              }}
+            >
+              <Text style={styles.modalButtonText}>Submit</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
       {/* Modal for Calls */}
-      <Modal visible={callModalVisible} transparent={true} animationType="slide">
+      <Modal
+        visible={callModalVisible}
+        transparent={true}
+        animationType="slide"
+      >
         <View style={styles.callModalContainer}>
           <View style={styles.callModalContent}>
             {isCalling && !inCall && !incomingCall && (
               <>
-              <Text style={styles.callModalText}>Calling {client?.firstName}</Text>
-              <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
-              <TouchableOpacity style={styles.callModalButton} onPress={cancelCall}>
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
+                <Text style={styles.callModalText}>
+                  Calling {client?.firstName}
+                </Text>
+                <Image
+                  source={{ uri: client?.photo }}
+                  style={styles.callPhoto}
+                />
+                <TouchableOpacity
+                  style={styles.callModalButton}
+                  onPress={cancelCall}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
               </>
             )}
             {inCall && !incomingCall && (
               <>
-                <Text style={styles.callModalText}>In call with {client?.firstName}</Text>
-                <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
-                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                <Text style={styles.callModalText}>
+                  In call with {client?.firstName}
+                </Text>
+                <Image
+                  source={{ uri: client?.photo }}
+                  style={styles.callPhoto}
+                />
+                <TouchableOpacity
+                  style={styles.callModalButton}
+                  onPress={endCall}
+                >
                   <Text style={styles.buttonText}>End Call</Text>
                 </TouchableOpacity>
               </>
             )}
             {incomingCall && inCall && (
               <>
-                <Text style={styles.callModalText}>In call with {incomingCall.senderData.firstName }</Text>
-                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
-                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                <Text style={styles.callModalText}>
+                  In call with {incomingCall.senderData.firstName}
+                </Text>
+                <Image
+                  source={{ uri: incomingCall.senderData.photo }}
+                  style={styles.callPhoto}
+                />
+                <TouchableOpacity
+                  style={styles.callModalButton}
+                  onPress={endCall}
+                >
                   <Text style={styles.buttonText}>End Call</Text>
                 </TouchableOpacity>
               </>
             )}
             {incomingCall && !inCall && (
               <>
-                <Text style={styles.callModalText}>Incoming call from {incomingCall.senderData.firstName}</Text>
-                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <Text style={styles.callModalText}>
+                  Incoming call from {incomingCall.senderData.firstName}
+                </Text>
+                <Image
+                  source={{ uri: incomingCall.senderData.photo }}
+                  style={styles.callPhoto}
+                />
                 <View style={{ flexDirection: "row", gap: 50 }}>
-                  <TouchableOpacity style={styles.callModalButton} onPress={acceptCall}>
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={acceptCall}
+                  >
                     <Text style={styles.buttonText}>Accept Call</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.callModalButton} onPress={rejectCall}>
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={rejectCall}
+                  >
                     <Text style={styles.buttonText}>Reject Call</Text>
                   </TouchableOpacity>
                 </View>
@@ -748,15 +898,15 @@ const Main = () => {
       </Modal>
 
       <Modal visible={connecting} transparent animationType="fade">
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={"#fff"} />
-      </View>
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={"#fff"} />
+        </View>
       </Modal>
     </ScrollView>
   );
 };
 
-export default Main
+export default Main;
 
 const styles = StyleSheet.create({
   loading: {
@@ -771,14 +921,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     margin: 20,
-    marginTop: 90,
+    marginTop: Platform.OS === "ios"? 140:100,
   },
   statsContainer: {
     width: "100%",
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     elevation: 5,
     marginBottom: 20,
     paddingHorizontal: 10,
@@ -789,8 +939,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     backgroundColor: colors.lightBlue,
     borderRadius: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
@@ -800,23 +950,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     marginBottom: 10,
+    textAlign: "center"
   },
   statValue: {
     fontSize: 26,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   section: {
     marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
     marginLeft: 20,
   },
   availableContainer: {
-    marginLeft: 20,
-    flexDirection: 'row',
+    marginLeft: 30,
+    flexDirection: "row",
     alignItems: "center",
   },
   toggleContainer: {
@@ -834,26 +985,26 @@ const styles = StyleSheet.create({
   available: {
     marginLeft: 20,
     fontSize: 20,
-    fontWeight: 500
+    fontWeight: 500,
   },
   orderCard: {
     marginHorizontal: 20,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 15,
     padding: 15,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
   orderHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   headerSection: {
-      flexDirection: 'column',
+    flexDirection: "column",
   },
   label: {
     fontSize: 17,
@@ -862,16 +1013,16 @@ const styles = StyleSheet.create({
   },
   orderBody: {
     marginTop: 0,
-    width: "100%"
+    width: "100%",
   },
   orderContent: {
     fontSize: 17,
     marginBottom: 10,
   },
   clientContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 10
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 10,
   },
   clientPhoto: {
     width: 60,
@@ -880,12 +1031,12 @@ const styles = StyleSheet.create({
     marginRight: 20,
   },
   clientInfo: {
-    flexDirection: 'column',
+    flexDirection: "column",
     flex: 1,
   },
   clientName: {
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 2,
   },
   callButton: {
@@ -893,60 +1044,60 @@ const styles = StyleSheet.create({
     padding: 9,
     backgroundColor: colors.accentGreen,
     borderRadius: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   buttonIcon: {
     width: 25,
     height: 25,
-    marginRight: 10
+    marginRight: 10,
   },
   mapButton: {
     padding: 8,
     borderRadius: 50,
     borderWidth: 2,
     borderColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   buttonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "bold",
     fontSize: 16,
   },
   mapButtonText: {
     color: colors.primary,
-    textAlign: 'center',
-    fontWeight: 'bold',
+    textAlign: "center",
+    fontWeight: "bold",
     fontSize: 16,
   },
   noOrders: {
     fontSize: 18,
     color: colors.text,
-    marginLeft: 20
+    marginLeft: 20,
   },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
   modalContent: {
-    width: '90%',
+    width: "90%",
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 15,
-    alignItems: 'center',
+    alignItems: "center",
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: 500,
-    color: '#000',
+    color: "#000",
     marginBottom: 10,
   },
   rejectButton: {
@@ -954,41 +1105,41 @@ const styles = StyleSheet.create({
     padding: 9,
     backgroundColor: colors.red,
     borderRadius: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalMessage: {
     fontSize: 15,
-    color: '#000',
-    textAlign: 'center',
+    color: "#000",
+    textAlign: "center",
     marginBottom: 20,
     width: "90%",
   },
   modalButton: {
-      backgroundColor: colors.primary,
-      padding: 10,
-      borderRadius: 50,
-      width: '90%',
-      alignItems: 'center',
+    backgroundColor: colors.primary,
+    padding: 10,
+    borderRadius: 50,
+    width: "90%",
+    alignItems: "center",
   },
   modalButtonText: {
-      color: '#fff',
-      fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
   },
   reviewStarsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20
+    marginBottom: 20,
   },
   reviewStar: {
     width: 40,
-    height: 40
+    height: 40,
   },
   staro: {
-    tintColor: "#969696"
+    tintColor: "#969696",
   },
   callModalContainer: {
     flex: 1,

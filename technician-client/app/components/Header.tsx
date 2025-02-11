@@ -10,8 +10,8 @@ const Header = () => {
   const pathname = usePathname();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <BlurView intensity={100} style={styles.blurContainer}>
+    <View style={styles.container}>
+      <BlurView intensity={10} tint="light" style={styles.blurContainer}>
         <View style={[styles.headerContent, pathname === "/" && { justifyContent: "flex-end"}, pathname.includes("map") && { justifyContent: "center"}]}>
             {pathname.includes("map") && <Text style={styles.title}>Order in progress</Text>}
             <Link href="/(tabs)/profile" style={pathname.includes("map") && styles.profileImageMap}>
@@ -22,7 +22,7 @@ const Header = () => {
             </Link>
         </View>
       </BlurView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -35,8 +35,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   blurContainer: {
-    paddingTop: Platform.OS === 'ios' ? 10 : 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    paddingTop: Platform.OS === "ios" ? 50 : 0,
+    backgroundColor: Platform.OS === "ios" ? "transparent": "rgba(255, 255, 255, 0.5)",
   },
   headerContent: {
     flexDirection: "row",

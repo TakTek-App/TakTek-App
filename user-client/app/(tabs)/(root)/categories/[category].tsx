@@ -1,8 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Text, View, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput, FlatList, Image, ActivityIndicator } from "react-native";
+import {
+  Text,
+  View,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  TextInput,
+  FlatList,
+  Image,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import * as Location from "expo-location";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from "../../../context/AuthContext";
 import { useCoords } from "../../../context/CoordsContext";
 import colors from "../../../../assets/colors/theme";
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
@@ -11,7 +24,8 @@ import { BlurView } from "expo-blur";
 import { useTechnician } from "@/app/context/TechnicianContext";
 import Constants from "expo-constants";
 
-const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_API_KEY =
+  Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
 interface Service {
   id: number;
@@ -23,12 +37,12 @@ export default function Services() {
   const [services, setServices] = useState<Service[]>();
   const [city, setCity] = useState<string | null>(null);
   const [country, setCountry] = useState<string | null>(null);
-  const [searchAddressQuery, setSearchAddressQuery] = useState<string>('');
+  const [searchAddressQuery, setSearchAddressQuery] = useState<string>("");
   const [searchAddressResults, setSearchAddressResults] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
-  
+
   const { id, name } = useLocalSearchParams();
 
   const [loadingCoords, setLoadingCoords] = useState(true);
@@ -37,13 +51,13 @@ export default function Services() {
   const { technician } = useTechnician();
 
   const serviceImages: { [key: string]: any } = {
-    towing: require('../../../../assets/icons/Tow Truck.png'),
-    roadassistance: require('@/assets/icons/Road.png'),
-    locksmith: require('../../../../assets/icons/Tool.png'),
-    gates: require('../../../../assets/icons/Gates.png'),
-    electric: require('../../../../assets/icons/Electric.png'),
-    plumbing: require('../../../../assets/icons/plumbing.png'),
-    waterdamage: require('../../../../assets/icons/Water Damage.png'),
+    towing: require("../../../../assets/icons/Tow Truck.png"),
+    roadassistance: require("@/assets/icons/Road.png"),
+    locksmith: require("../../../../assets/icons/Tool.png"),
+    gates: require("../../../../assets/icons/Gates.png"),
+    electric: require("../../../../assets/icons/Electric.png"),
+    plumbing: require("../../../../assets/icons/plumbing.png"),
+    waterdamage: require("../../../../assets/icons/Water Damage.png"),
   };
 
   useEffect(() => {
@@ -52,15 +66,18 @@ export default function Services() {
   }, [user, loading, technician]);
 
   const mapRef = useRef<MapView>(null);
-  
+
   useEffect(() => {
     if (mapRef.current && coords) {
-      mapRef.current.animateToRegion({
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }, 1000);
+      mapRef.current.animateToRegion(
+        {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        },
+        1000
+      );
     }
     setLoadingCoords(false);
   }, [mapRef.current]);
@@ -68,7 +85,9 @@ export default function Services() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/services/category/${id}`);
+        const response = await fetch(
+          `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/services/category/${id}`
+        );
         const result = response.ok ? await response.json() : [];
         setServices(result);
       } catch (err) {
@@ -125,7 +144,10 @@ export default function Services() {
   if (loading) {
     return (
       <View style={styles.loading}>
-        <Image source={require("../../../../assets/images/logo-white.png")} style={styles.logo} />
+        <Image
+          source={require("../../../../assets/images/logo-white.png")}
+          style={styles.logo}
+        />
       </View>
     );
   }
@@ -134,86 +156,103 @@ export default function Services() {
     <GestureHandlerRootView style={styles.container}>
       {/* Fullscreen Map */}
       {loadingCoords ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-      <MapView ref={mapRef}
-        style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        region={{
-          latitude: coords?.latitude ?? 0,
-          longitude: coords?.longitude ?? 0,
-          latitudeDelta: 0.0112,
-          longitudeDelta: 0.0121,
-        }}
-      >
-        <Marker
-          coordinate={coords!}
-          title="Current Location"
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          provider={PROVIDER_GOOGLE}
+          region={{
+            latitude: coords?.latitude ?? 0,
+            longitude: coords?.longitude ?? 0,
+            latitudeDelta: 0.0112,
+            longitudeDelta: 0.0121,
+          }}
         >
-          <Image
-            source={require("../../../../assets/icons/Location_icon.png")}
-            style={styles.currentLocationPin}
-            resizeMode="contain"
-          />
-        </Marker>
-      </MapView>)} 
+          <Marker coordinate={coords!} title="Current Location">
+            <Image
+              source={require("../../../../assets/icons/Location_icon.png")}
+              style={styles.currentLocationPin}
+              resizeMode="contain"
+            />
+          </Marker>
+        </MapView>
+      )}
 
       {/* Bottom Sheet */}
       <View style={styles.bottomSheet}>
         {/* Address Container */}
-        <BlurView style={styles.addressContainer}>
-          <Text style={styles.addressTitle}>It looks like you need a service in</Text>
+        <BlurView intensity={100} tint="light" style={styles.addressContainer}>
+          <Text style={styles.addressTitle}>
+            It looks like you need a service in
+          </Text>
           {errorMsg ? (
             <Text style={styles.error}>{errorMsg}</Text>
-          ) : coords ? isEditing ? (
-          <View style={styles.searchAddressContainer}>
-            <TextInput
-              placeholder="Search for an address"
-              value={searchAddressQuery}
-              onChangeText={(text) => {
-                setSearchAddressQuery(text);
-                searchAddress(text);
-              } }
-              style={styles.addressInput}
-            />
-            <TouchableOpacity onPress={() => {
-                  setIsEditing(false)
-                  // console.log("editing false")
-                }
-              }>
-              <Image
-              source={require('@/assets/icons/close.png')}
-              style={styles.closeAddressInput}
-            />
-            </TouchableOpacity>  
-          </View>
+          ) : coords ? (
+            isEditing ? (
+              <View style={styles.searchAddressContainer}>
+                <TextInput
+                  placeholder="Search for an address"
+                  value={searchAddressQuery}
+                  onChangeText={(text) => {
+                    setSearchAddressQuery(text);
+                    searchAddress(text);
+                  }}
+                  style={styles.addressInput}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsEditing(false);
+                    // console.log("editing false")
+                  }}
+                >
+                  <Image
+                    source={require("@/assets/icons/close.png")}
+                    style={styles.closeAddressInput}
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setIsEditing(true)}
+                style={styles.addressRow}
+              >
+                <Text
+                  style={styles.address}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {address}
+                </Text>
+                <Image
+                  source={require("../../../../assets/icons/edit.png")}
+                  style={styles.changeAddress}
+                />
+              </TouchableOpacity>
+            )
           ) : (
-          <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.addressRow}>
-            <Text style={styles.address} numberOfLines={1} ellipsizeMode="tail">{address}
-            </Text>
-            <Image
-                source={require('../../../../assets/icons/edit.png')}
-                style={styles.changeAddress}
-            />
-          </TouchableOpacity>
-          ) : (
-          <Text style={styles.address}>Your Location: Awaiting...</Text>
-        )}
+            <Text style={styles.address}>Your Location: Awaiting...</Text>
+          )}
+        </BlurView>
 
         {isEditing && searchAddressResults.length > 0 && (
-          <FlatList style={styles.addressSuggestions}
+          <FlatList
+            style={styles.addressSuggestions}
             data={searchAddressResults}
             keyExtractor={(item) => item.place_id}
             renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => selectAddress(item.description)}>
+              <TouchableOpacity
+                onPress={() => selectAddress(item.description)}
+              >
                 <Text style={styles.suggestion}>{item.description}</Text>
               </TouchableOpacity>
             )}
           />
         )}
-        </BlurView>
 
         {/* Service List in ScrollView */}
         <ScrollView contentContainerStyle={styles.servicesContainer}>
@@ -232,7 +271,11 @@ export default function Services() {
                 >
                   <View style={styles.serviceContent}>
                     <Image
-                      source={serviceImages[service.name.toLowerCase().replace(/\s+/g, '')]}
+                      source={
+                        serviceImages[
+                          service.name.toLowerCase().replace(/\s+/g, "")
+                        ]
+                      }
                       style={styles.serviceImage}
                     />
                     <Text style={styles.serviceText}>{service.name}</Text>
@@ -275,17 +318,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 5,
-    maxHeight: "35%",
+    height: "35%",
   },
   addressContainer: {
     position: "absolute",
     top: -100,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: Platform.OS === "ios" ? "transparent": "rgba(255, 255, 255, 0.5)",
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: "#fff",
+    overflow: "hidden",
     padding: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -297,7 +341,7 @@ const styles = StyleSheet.create({
   },
   addressTitle: {
     fontSize: 16,
-    marginBottom: 10
+    marginBottom: 10,
   },
   addressRow: {
     flexDirection: "row",
@@ -308,7 +352,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     padding: 5,
     paddingHorizontal: 10,
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
   address: {
     fontSize: 16,
@@ -333,18 +377,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     padding: 5,
     paddingHorizontal: 10,
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
   addressSuggestions: {
-    position: 'absolute',
+    zIndex: 10,
+    position: "absolute",
     width: "100%",
-    top: 90,
+    top: 0,
     padding: 8,
     fontSize: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.primary,
     borderRadius: 10,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   suggestion: {
     padding: 8,
@@ -373,7 +418,7 @@ const styles = StyleSheet.create({
   },
   serviceButton: {
     width: "90%",
-    alignItems: "center", 
+    alignItems: "center",
     justifyContent: "center",
     marginVertical: 8,
   },
@@ -406,5 +451,5 @@ const styles = StyleSheet.create({
   logo: {
     width: "80%",
     height: "30%",
-  }
+  },
 });

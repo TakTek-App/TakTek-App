@@ -1,8 +1,22 @@
-const io = require("socket.io")(3002, {
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+
+const app = express();
+const server = http.createServer(app);
+const PORT = process.env.PORT || 3002;
+
+const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // Change to your frontend URL if needed
     methods: ["GET", "POST"],
-  },
+    allowedHeaders: ["Content-Type"],
+  }
+});
+
+// Health check route
+app.get("/", (req, res) => {
+  res.send("Socket.io Server is Running!");
 });
 
 let peers = {}; // Store connected peers
@@ -274,4 +288,8 @@ io.on("connection", (socket) => {
       }
     });
   });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

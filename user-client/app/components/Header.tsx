@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, Platform, SafeAreaView, TouchableOpacity } from 'react-native';
-import { BlurView } from 'expo-blur';
-import colors from '../../assets/colors/theme';
-import { Link, useRouter, usePathname } from 'expo-router';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  Platform,
+  SafeAreaView,
+  TouchableOpacity,
+} from "react-native";
+import { BlurView } from "expo-blur";
+import colors from "../../assets/colors/theme";
+import { Link, useRouter, usePathname } from "expo-router";
+import { useAuth } from "../context/AuthContext";
 
 const Header = () => {
   const { user } = useAuth();
@@ -11,56 +19,65 @@ const Header = () => {
   const pathname = usePathname();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <BlurView intensity={100} style={styles.blurContainer}>
-        <View style={[
-          styles.headerContent,
-          pathname === "/" && { justifyContent: "flex-end" },
-          pathname.includes("map") && { justifyContent: "center" }
-        ]}>
+    <View style={styles.container}>
+      <BlurView intensity={10} tint="light" style={styles.blurContainer}>
+        <View
+          style={[
+            styles.headerContent,
+            pathname === "/" && { justifyContent: "flex-end" },
+            pathname.includes("map") && { justifyContent: "center" },
+          ]}
+        >
           {pathname !== "/" && !pathname.includes("map") && (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
               <Image
-                source={require('../../assets/icons/ArrowLeft.png')}
+                source={require("../../assets/icons/ArrowLeft.png")}
                 style={styles.backButtonImage}
               />
             </TouchableOpacity>
           )}
           {pathname.includes("services") && (
-            <Text style={styles.title}>These services are the closest to you</Text>
+            <Text style={styles.title}>
+              These services are the closest to you
+            </Text>
           )}
           {pathname.includes("map") && (
-            <Text style={styles.title}>The technician is on their way to you</Text>
+            <Text style={styles.title}>
+              The technician is on their way to you
+            </Text>
           )}
-          <Link href="/(tabs)/profile" style={pathname.includes("map") && styles.profileImageMap}>
-            <Image
-              source={{ uri: user?.photo }}
-              style={styles.profileImage}
-            />
+          <Link
+            href="/(tabs)/profile"
+            style={pathname.includes("map") && styles.profileImageMap}
+          >
+            <Image source={{ uri: user?.photo }} style={styles.profileImage} />
           </Link>
         </View>
       </BlurView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     top: 0,
     zIndex: 10,
   },
   blurContainer: {
-    paddingTop: Platform.OS === 'ios' ? 10 : 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    paddingTop: Platform.OS === "ios" ? 50 : 0,
+    backgroundColor: Platform.OS === "ios" ? "transparent": "rgba(255, 255, 255, 0.5)",
   },
   headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
-    width: '100%',
-    alignItems: 'flex-start',
+    width: "100%",
+    alignItems: "flex-start",
     padding: 15,
     paddingHorizontal: 20,
     borderBottomColor: colors.border,
@@ -69,7 +86,6 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    right: 10,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 20,

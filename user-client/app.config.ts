@@ -15,8 +15,9 @@ export default ({config}: ConfigContext): ExpoConfig => ({
     "bundleIdentifier": "com.anonymous.userclient",
     "icon": "./assets/images/Icon IOS 1024x1024.png",
     "infoPlist": {
-      "NSLocationWhenInUseUsageDescription": "This app needs access to your location.",
-      "NSMicrophoneUsageDescription": "This app needs access to your microphone."
+      NSLocationWhenInUseUsageDescription: "This app needs access to your location.",
+      NSMicrophoneUsageDescription: "This app needs access to your microphone.",
+      NSCameraUsageDescription: "This app needs access to your camera to take screenshots for your profil display."
     }
   },
   "android": {

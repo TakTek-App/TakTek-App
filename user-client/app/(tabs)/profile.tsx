@@ -136,6 +136,7 @@ const ProfileScreen = () => {
                         editable={false}
                         style={styles.disabledInput}
                         placeholder="Enter new password"
+                        placeholderTextColor={colors.text}
                         value={newPassword}
                         onChangeText={text => { setNewPassword(text); handleChange(); }}
                         secureTextEntry={!showPassword}

@@ -70,115 +70,124 @@ const SupportScreen = () => {
 
     return (
       <SafeAreaView style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-              <Text style={styles.headerTitle}>Support</Text>
-              <Link href="/(tabs)/profile" style={styles.headerLink}>
-                  <Image
-                      source={photo}
-                      style={styles.profileImage}
-                  />
-              </Link>
-          </View>
-
-          {/* Chat Body */}
-          <ScrollView contentContainerStyle={styles.chatContainer}>
-          {chatMessages.map((msg) => (
-            <View
-                key={msg.id}
-                style={[
-                    styles.messageRow,
-                    msg.sender === 'user' ? styles.userRow : styles.supportRow,
-                ]}
-            >
-                {/* Support Image */}
-                {msg.sender === 'support' && (
-                    <Image
-                        source={require('../../assets/images/logo.png')} // Replace with your support image
-                        style={styles.messageImage}
-                    />
-                )}
-
-                {/* Message Content */}
-                <View style={styles.messageCol}>
-                    {msg.sender === 'support' && (
-                        <Text style={styles.supportTitle}>TakTek Support</Text>
-                    )}
-                    <View
-                        style={[
-                            styles.messageContent,
-                            msg.sender === 'user' ? styles.userContent : styles.supportContent,
-                        ]}
-                    >
-                        <Text style={[styles.messageText, msg.sender === 'user' && styles.userText]}>{msg.message}</Text>
-                    </View>
-                    <Text
-                        style={[
-                            styles.messageTime,
-                            msg.sender === 'user' ? styles.userTime : styles.supportTime,
-                        ]}
-                    >
-                        {msg.time}
-                    </Text>
-                </View>
-
-                {/* User Image */}
-                {msg.sender === 'user' && (
-                    <Image
-                        source={require('../../assets/images/logo.png')} // Replace with your user image
-                        style={styles.messageImage}
-                    />
-                )}
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Input Area */}
-        <View style={styles.inputContainer}>
-            <TextInput
-                style={styles.textInput}
-                placeholder="Type message"
-                placeholderTextColor={colors.border}
-                value={inputMessage}
-                onChangeText={setInputMessage}
-            />
-            <TouchableOpacity style={styles.micButton}>
+        {/* Header */}
+        <View style={styles.header}>
+            <Text style={styles.headerTitle}>Support</Text>
+            <Link href="/(tabs)/profile" style={styles.headerLink}>
                 <Image
-                    source={require('../../assets/icons/Mic.png')}
+                    source={photo}
+                    style={styles.profileImage}
                 />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                <Image
-                    source={require('../../assets/icons/Send.png')}
-                />
-            </TouchableOpacity>
+            </Link>
         </View>
 
-        {/* Modal for alerts */}
-        <Modal
-            visible={modalVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => router.replace("/")}
-        >
-          <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                  <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                  <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => router.replace("/")}
+        {/* Chat Body */}
+        <ScrollView contentContainerStyle={styles.chatContainer}>
+        {chatMessages.map((msg) => (
+          <View
+              key={msg.id}
+              style={[
+                  styles.messageRow,
+                  msg.sender === 'user' ? styles.userRow : styles.supportRow,
+              ]}
+          >
+              {/* Support Image */}
+              {msg.sender === 'support' && (
+                  <Image
+                      source={require('../../assets/images/logo.png')} // Replace with your support image
+                      style={styles.messageImage}
+                  />
+              )}
+
+              {/* Message Content */}
+              <View style={styles.messageCol}>
+                  {msg.sender === 'support' && (
+                      <Text style={styles.supportTitle}>TakTek Support</Text>
+                  )}
+                  <View
+                      style={[
+                          styles.messageContent,
+                          msg.sender === 'user' ? styles.userContent : styles.supportContent,
+                      ]}
                   >
-                      <Text style={styles.modalButtonText}>Close</Text>
-                  </TouchableOpacity>
+                      <Text style={[styles.messageText, msg.sender === 'user' && styles.userText]}>{msg.message}</Text>
+                  </View>
+                  <Text
+                      style={[
+                          styles.messageTime,
+                          msg.sender === 'user' ? styles.userTime : styles.supportTime,
+                      ]}
+                  >
+                      {msg.time}
+                  </Text>
               </View>
+
+              {/* User Image */}
+              {msg.sender === 'user' && (
+                  <Image
+                      source={require('../../assets/images/logo.png')} // Replace with your user image
+                      style={styles.messageImage}
+                  />
+              )}
           </View>
-        </Modal>
-      </SafeAreaView>
-    );
+        ))}
+      </ScrollView>
+
+      {/* Input Area */}
+      <View style={styles.inputContainer}>
+          <TextInput
+              style={styles.textInput}
+              placeholder="Type message"
+              placeholderTextColor={colors.border}
+              value={inputMessage}
+              onChangeText={setInputMessage}
+          />
+          <TouchableOpacity style={styles.micButton}>
+              <Image
+                  source={require('../../assets/icons/Mic.png')}
+              />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+              <Image
+                  source={require('../../assets/icons/Send.png')}
+              />
+          </TouchableOpacity>
+      </View>
+
+      {/* Modal for alerts */}
+      <Modal
+          visible={modalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => router.replace("/")}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setModalVisible(false);
+                router.replace("/");
+              }}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {!modalVisible && <View style={styles.overlay} />}
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255, 255, 255, 0.5)",
+    zIndex: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: '#fff',
