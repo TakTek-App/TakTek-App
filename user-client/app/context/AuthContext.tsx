@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 
 interface Service {
   id: number;
@@ -98,6 +100,7 @@ interface AuthContextType {
   fetchUserInfo: (userId: number) => Promise<Job | null>;
   createCall: (userId: number, technicianId: number) => Promise<void>;
   review: (technicianId: number, jobId: number, rating: number) => Promise<void>;
+  deleteUser: () => Promise<void>;
   setStorageKey: (key: string, value: string | null) => Promise<void>;
 }
 
@@ -307,6 +310,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const deleteUser = async () => {
+    if (!user) return;
+  
+    try {
+      const newEmail = uuidv4();
+      const newPhone = uuidv4();
+  
+      const updatedUser = {
+        firstName: "",
+        lastName: "",
+        email: newEmail,
+        phone: newPhone,
+      };
+  
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${user.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedUser),
+      });
+  
+      if (!response.ok) {
+        throw new Error("Failed to delete user");
+      }
+  
+      console.log("User deleted (anonymized) successfully");
+  
+      setTimeout(() => {
+        logOutUser();
+      }, 1500);
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      throw error;
+    }
+  };
+
   const setStorageKey = async (key: string, value: string | null) => {
     await setStorageItem(key, value);
   };
@@ -323,6 +363,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         fetchUserInfo,
         createCall,
         review,
+        deleteUser,
         setStorageKey,
       }}
     >

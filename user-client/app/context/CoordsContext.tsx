@@ -12,6 +12,10 @@ interface CoordsContextType {
   setCoords: (coords: Coords | null) => Promise<void>;
   address: string | null;
   setAddress: (address: string | null) => Promise<void>;
+  city: string | null;
+  setCity: (city: string | null) => Promise<void>;
+  country: string | null;
+  setCountry: (country: string | null) => Promise<void>;
   loading: boolean;
 }
 
@@ -66,6 +70,8 @@ interface CoordsProviderProps {
 export const CoordsProvider: React.FC<CoordsProviderProps> = ({ children }) => {
   const [coords, setCoordsState] = useState<Coords | null>(null);
   const [address, setAddressState] = useState<string | null>(null);
+  const [city, setCityState] = useState<string | null>(null);
+  const [country, setCountryState] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -91,8 +97,18 @@ export const CoordsProvider: React.FC<CoordsProviderProps> = ({ children }) => {
     await setStorageItem("address_data", newAddress ? JSON.stringify(newAddress) : null);
   };
 
+  const setCity = async (newCity: string | null) => {
+    setCityState(newCity);
+    await setStorageItem("city_data", newCity ? JSON.stringify(newCity) : null);
+  };
+
+  const setCountry = async (newCountry: string | null) => {
+    setCountryState(newCountry);
+    await setStorageItem("country_data", newCountry ? JSON.stringify(newCountry) : null);
+  };
+
   return (
-    <CoordsContext.Provider value={{ coords, setCoords, address, setAddress, loading }}>
+    <CoordsContext.Provider value={{ coords, setCoords, address, setAddress, city, setCity, country, setCountry, loading }}>
       {children}
     </CoordsContext.Provider>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, TextInput, Text, StyleSheet, TouchableOpacity, View, Image, Modal, Alert, ScrollView } from 'react-native';
+import { SafeAreaView, TextInput, Text, StyleSheet, TouchableOpacity, View, Image, Modal, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import colors from "../../assets/colors/theme";
@@ -17,7 +17,12 @@ const ProfileScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', message: '' });
   const [saveEnabled, setSaveEnabled] = useState(false);
-  const { logOutUser } = useAuth();
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [isConfirmEnabled, setIsConfirmEnabled] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const { logOutUser, deleteUser } = useAuth();
 
   useEffect(() => {
     console.log("Logging user from profile", user);
@@ -80,6 +85,32 @@ const ProfileScreen = () => {
       }
   };
 
+  const handleDeletePress = () => {
+    setDeleting(true);
+    setConfirmText("");
+    setIsConfirmEnabled(false);
+    setConfirmModalVisible(true);
+  };
+
+  const handleConfirmTextChange = (text: string) => {
+    setConfirmText(text);
+    setIsConfirmEnabled(text === "DELETE");
+  };
+
+  const handleConfirmDelete = async () => {
+    setConfirmModalVisible(false);
+    try {
+      await deleteUser();
+      setModalContent({ title: "Profile Deleted", message: "Your profile has been deleted successfully." });
+      setModalVisible(true);
+    } catch (error) {
+      setModalContent({ title: "Error", message: "Failed to delete account. Please try again." });
+      setModalVisible(true);
+    } finally {
+      setDeleting(false)
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -87,90 +118,99 @@ const ProfileScreen = () => {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollViewContent}>
-            <View style={styles.main}>
-                {/* Profile Picture */}
-                <Image source={photo} style={styles.profileImage} />
-                {/* <TouchableOpacity>
-                    <Text style={styles.changePhoto}>Change photo</Text>
-                </TouchableOpacity> */}
+          <View style={styles.main}>
+              {/* Profile Picture */}
+              <Image source={photo} style={styles.profileImage} />
+              {/* <TouchableOpacity>
+                  <Text style={styles.changePhoto}>Change photo</Text>
+              </TouchableOpacity> */}
 
-                {/* Editable Fields */}
-                <Text style={styles.label}>First Name</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter your first name"
-                    value={firstName}
-                    onChangeText={text => { setFirstName(text); handleChange(); }}
-                />
+              {/* Editable Fields */}
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                  style={styles.input}
+                  placeholder="Enter your first name"
+                  value={firstName}
+                  onChangeText={text => { setFirstName(text); handleChange(); }}
+              />
 
-                <Text style={styles.label}>Last Name</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter your last name"
-                    value={lastName}
-                    onChangeText={text => { setLastName(text); handleChange(); }}
-                />
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your last name"
+                value={lastName}
+                onChangeText={text => { setLastName(text); handleChange(); }}
+              />
 
-                <Text style={styles.label}>Email</Text>
-                <TextInput
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                editable={false}
+                style={styles.disabledInput}
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={text => { setEmail(text); handleChange(); }}
+                keyboardType="email-address"
+              />
+
+              <Text style={styles.label}>Phone</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your phone number"
+                value={phone}
+                onChangeText={text => { setPhone(text); handleChange(); }}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.label}>New Password</Text>
+              <View style={styles.passwordContainer}>
+                  <TextInput
                     editable={false}
                     style={styles.disabledInput}
-                    placeholder="Enter your email"
-                    value={email}
-                    onChangeText={text => { setEmail(text); handleChange(); }}
-                    keyboardType="email-address"
+                    placeholder="Enter new password"
+                    placeholderTextColor={colors.text}
+                    value={newPassword}
+                    onChangeText={text => { setNewPassword(text); handleChange(); }}
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity
+                      onPress={() => setShowPassword(prev => !prev)}
+                      style={styles.eyeIcon}
+                  >
+                      <Ionicons
+                          name={showPassword ? "eye-off" : "eye"}
+                          size={24}
+                          color="black"
+                      />
+                  </TouchableOpacity>
+              </View>
+
+              {/* Save Button */}
+              <TouchableOpacity
+                  style={[styles.button, { backgroundColor: saveEnabled ? colors.primary : '#aaa' }]}
+                  onPress={handleSave}
+                  disabled={!saveEnabled}
+              >
+                  <Text style={styles.buttonText}>Save</Text>
+              </TouchableOpacity>
+
+              {/* Log Out Button */}
+              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <Image 
+                  source={require("../../assets/icons/SignOut.png")}
+                  style={styles.logoutIcon}
                 />
+                <Text style={styles.logoutButtonText}>Log Out</Text>
+              </TouchableOpacity>
 
-                <Text style={styles.label}>Phone</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter your phone number"
-                    value={phone}
-                    onChangeText={text => { setPhone(text); handleChange(); }}
-                    keyboardType="phone-pad"
-                />
-
-                <Text style={styles.label}>New Password</Text>
-                <View style={styles.passwordContainer}>
-                    <TextInput
-                        editable={false}
-                        style={styles.disabledInput}
-                        placeholder="Enter new password"
-                        placeholderTextColor={colors.text}
-                        value={newPassword}
-                        onChangeText={text => { setNewPassword(text); handleChange(); }}
-                        secureTextEntry={!showPassword}
-                    />
-                    <TouchableOpacity
-                        onPress={() => setShowPassword(prev => !prev)}
-                        style={styles.eyeIcon}
-                    >
-                        <Ionicons
-                            name={showPassword ? "eye-off" : "eye"}
-                            size={24}
-                            color="black"
-                        />
-                    </TouchableOpacity>
-                </View>
-
-                {/* Save Button */}
-                <TouchableOpacity
-                    style={[styles.button, { backgroundColor: saveEnabled ? colors.primary : '#aaa' }]}
-                    onPress={handleSave}
-                    disabled={!saveEnabled}
-                >
-                    <Text style={styles.buttonText}>Save</Text>
-                </TouchableOpacity>
-
-                {/* Log Out Button */}
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                    <Image 
-                      source={require("../../assets/icons/SignOut.png")}
-                      style={styles.logoutIcon}
-                    />
-                    <Text style={styles.logoutButtonText}>Log Out</Text>
-                </TouchableOpacity>
-            </View>
+              {/* Delete Account Button */}
+              <TouchableOpacity style={[styles.logoutButton, deleting && {backgroundColor: colors.text}]} onPress={handleDeletePress} disabled={deleting}>
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                  <Text style={styles.logoutButtonText}>Delete Account</Text>
+                )}
+              </TouchableOpacity>
+          </View>
         </ScrollView>
 
         {/* Modal for alerts */}
@@ -180,19 +220,63 @@ const ProfileScreen = () => {
             animationType="fade"
             onRequestClose={() => setModalVisible(false)}
         >
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                    <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                    <TouchableOpacity
-                        style={styles.modalButton}
-                        onPress={() => setModalVisible(false)}
-                    >
-                        <Text style={styles.modalButtonText}>Close</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+          <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>{modalContent.title}</Text>
+                  <Text style={styles.modalMessage}>{modalContent.message}</Text>
+                  <TouchableOpacity
+                      style={styles.modalButton}
+                      onPress={() => setModalVisible(false)}
+                  >
+                      <Text style={styles.modalButtonText}>Close</Text>
+                  </TouchableOpacity>
+              </View>
+          </View>
         </Modal>
+
+        <Modal
+          visible={confirmModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setConfirmModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Deletion</Text>
+            <Text style={[styles.modalMessage,{width:"80%"}]}>
+              Type "DELETE" below to confirm the deletion of your account. This action cannot be undone.
+            </Text>
+
+            <TextInput
+              style={styles.confirmInput}
+              placeholder="Type DELETE"
+              placeholderTextColor={colors.text}
+              onChangeText={handleConfirmTextChange}
+              value={confirmText}
+            />
+
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: isConfirmEnabled ? "red" : "#aaa", flex:1 }]}
+                onPress={handleConfirmDelete}
+                disabled={!isConfirmEnabled}
+              >
+                <Text style={styles.modalButtonText}>Delete</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, {flex: 1}]}
+                onPress={() => {
+                  setDeleting(false);
+                  setConfirmModalVisible(false);
+                }}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -347,6 +431,21 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  confirmInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 20,
+    fontSize: 16,
+    width: "90%"
+  },
+  modalButtonContainer: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    width: "90%",
   },
 });
 

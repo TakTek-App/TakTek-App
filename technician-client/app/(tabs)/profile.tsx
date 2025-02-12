@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, TextInput, Text, StyleSheet, TouchableOpacity, View, Image, Modal, Alert, ScrollView, FlatList, SectionList } from 'react-native';
+import { SafeAreaView, TextInput, Text, StyleSheet, TouchableOpacity, View, Image, Modal, Alert, ScrollView, FlatList, SectionList, ActivityIndicator } from 'react-native';
 import Checkbox from 'expo-checkbox';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -18,7 +18,12 @@ const ProfileScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', message: '' });
   const [saveEnabled, setSaveEnabled] = useState(false);
-  const { logOutTechnician } = useAuth();
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [isConfirmEnabled, setIsConfirmEnabled] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const { logOutTechnician, deleteTechnician } = useAuth();
 
   const categories = [
     { id: 1, name: 'Car' },
@@ -121,6 +126,32 @@ const ProfileScreen = () => {
       setSaveEnabled(true);
     } else {
       setSaveEnabled(false);
+    }
+  };
+
+  const handleDeletePress = () => {
+    setDeleting(true);
+    setConfirmText("");
+    setIsConfirmEnabled(false);
+    setConfirmModalVisible(true);
+  };
+
+  const handleConfirmTextChange = (text: string) => {
+    setConfirmText(text);
+    setIsConfirmEnabled(text === "DELETE");
+  };
+
+  const handleConfirmDelete = async () => {
+    setConfirmModalVisible(false);
+    try {
+      await deleteTechnician();
+      setModalContent({ title: "Profile Deleted", message: "Your profile has been deleted successfully." });
+      setModalVisible(true);
+    } catch (error) {
+      setModalContent({ title: "Error", message: "Failed to delete account. Please try again." });
+      setModalVisible(true);
+    } finally {
+      setDeleting(false)
     }
   };
 
@@ -250,6 +281,15 @@ const ProfileScreen = () => {
                     />
                     <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
+
+                {/* Delete Account Button */}
+                <TouchableOpacity style={[styles.logoutButton, deleting && {backgroundColor: colors.text}]} onPress={handleDeletePress} disabled={deleting}>
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                  <Text style={styles.logoutButtonText}>Delete Account</Text>
+                )}
+              </TouchableOpacity>
             </View>
         </ScrollView>
 
@@ -273,6 +313,50 @@ const ProfileScreen = () => {
                 </View>
             </View>
         </Modal>
+
+        <Modal
+          visible={confirmModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setConfirmModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Deletion</Text>
+            <Text style={[styles.modalMessage,{width:"80%"}]}>
+              Type "DELETE" below to confirm the deletion of your account. This action cannot be undone.
+            </Text>
+
+            <TextInput
+              style={styles.confirmInput}
+              placeholder="Type DELETE"
+              placeholderTextColor={colors.text}
+              onChangeText={handleConfirmTextChange}
+              value={confirmText}
+            />
+
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: isConfirmEnabled ? "red" : "#aaa", flex:1 }]}
+                onPress={handleConfirmDelete}
+                disabled={!isConfirmEnabled}
+              >
+                <Text style={styles.modalButtonText}>Delete</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, {flex: 1}]}
+                onPress={() => {
+                  setDeleting(false);
+                  setConfirmModalVisible(false);
+                }}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -472,6 +556,21 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  confirmInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 20,
+    fontSize: 16,
+    width: "90%"
+  },
+  modalButtonContainer: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    width: "90%",
   },
 });
 

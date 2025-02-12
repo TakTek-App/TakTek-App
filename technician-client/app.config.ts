@@ -6,14 +6,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "technician-client",
   version: "1.0.0",
   orientation: "portrait",
-  icon: "./assets/images/Icon IOS 1024x1024_blanco.jpg",
+  icon: "./assets/images/Icon IOS 1024x1024.jpg",
   scheme: "myapp",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
-    supportsTablet: true,
+    supportsTablet: false,
     bundleIdentifier: "com.samuelgeeks5g.taktektechnicians",
-    icon: "./assets/images/Icon IOS 1024x1024.png",
+    icon: "./assets/images/Icon IOS 1024x1024.jpg",
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
         "This app needs access to your location to share it with other users.",
@@ -29,8 +29,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/images/Adaptive.png",
-      backgroundColor: "#fff",
+      foregroundImage: "./assets/images/Adaptive.jpg",
+      backgroundColor: "#1D71BF",
     },
     config: {
       googleMaps: {
@@ -49,10 +49,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/Icon IOS 1024x1024.png",
+        image: "./assets/images/Icon IOS 1024x1024.jpg",
         imageWidth: 200,
         resizeMode: "cover",
-        backgroundColor: "#fff",
+        backgroundColor: "#1D71BF",
       },
     ],
   ],

@@ -35,8 +35,6 @@ interface Service {
 export default function Services() {
   const { user, loading } = useAuth();
   const [services, setServices] = useState<Service[]>();
-  const [city, setCity] = useState<string | null>(null);
-  const [country, setCountry] = useState<string | null>(null);
   const [searchAddressQuery, setSearchAddressQuery] = useState<string>("");
   const [searchAddressResults, setSearchAddressResults] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -47,7 +45,7 @@ export default function Services() {
 
   const [loadingCoords, setLoadingCoords] = useState(true);
 
-  const { coords, setCoords, address, setAddress } = useCoords();
+  const { coords, setCoords, address, setAddress, city, country } = useCoords();
   const { technician } = useTechnician();
 
   const serviceImages: { [key: string]: any } = {
@@ -109,7 +107,7 @@ export default function Services() {
         const response = await fetch(url);
         const data = await response.json();
 
-        if (data.status === "OK") setSearchAddressResults(data.predictions);
+        if (data.status === "OK")setSearchAddressResults(data.predictions);
         else setSearchAddressResults([]);
       } catch {
         setSearchAddressResults([]);
@@ -125,7 +123,8 @@ export default function Services() {
       const data = await response.json();
 
       if (data.status === "OK") {
-        setCoords(data.results[0].geometry.location);
+        setCoords({latitude: data.results[0].geometry.location.lat, longitude: data.results[0].geometry.location.lng});
+        console.log(data.results[0].geometry.location.lat, data.results[0].geometry.location.lng)
         setAddress(address);
       } else {
         setErrorMsg("Failed to fetch coordinates");
@@ -207,6 +206,8 @@ export default function Services() {
                 <TouchableOpacity
                   onPress={() => {
                     setIsEditing(false);
+                    setSearchAddressQuery("");
+                    setSearchAddressResults([]);
                     // console.log("editing false")
                   }}
                 >
@@ -229,7 +230,7 @@ export default function Services() {
                   {address}
                 </Text>
                 <Image
-                  source={require("../../../../assets/icons/edit.png")}
+                  source={require("@/assets/icons/edit.png")}
                   style={styles.changeAddress}
                 />
               </TouchableOpacity>

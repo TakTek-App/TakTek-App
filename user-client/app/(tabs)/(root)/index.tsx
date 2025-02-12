@@ -38,8 +38,6 @@ export default function Index() {
 
   const { user, loading } = useAuth();
   const [categories, setCategories] = useState<Category[]>();
-  const [city, setCity] = useState<string | null>(null);
-  const [country, setCountry] = useState<string | null>(null);
   const [loadingLocation, setLoadinglocation] = useState(true);
   const [searchAddressQuery, setSearchAddressQuery] = useState<string>("");
   const [searchAddressResults, setSearchAddressResults] = useState<any[]>([]);
@@ -47,7 +45,7 @@ export default function Index() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
 
-  const { coords, setCoords, address, setAddress } = useCoords();
+  const { coords, setCoords, address, setAddress, city, setCity, country, setCountry } = useCoords();
   const { technician } = useTechnician();
 
   const categoryImages: { [key: string]: any } = useMemo(
@@ -138,7 +136,7 @@ export default function Index() {
       try {
         const locationResult = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = locationResult.coords;
-        console.log(coords);
+        console.log("coords", coords);
         setCoords({ latitude, longitude });
         // setCoords({ latitude: 6.2074576, longitude: -75.5708091 });
 
@@ -177,7 +175,8 @@ export default function Index() {
       const data = await response.json();
 
       if (data.status === "OK") {
-        setCoords(data.results[0].geometry.location);
+        setCoords({latitude: data.results[0].geometry.location.lat, longitude: data.results[0].geometry.location.lng});
+        console.log(data.results[0].geometry.location.lat, data.results[0].geometry.location.lng)
         setAddress(address);
       } else {
         setErrorMsg("Failed to fetch coordinates");
@@ -260,11 +259,13 @@ export default function Index() {
                 <TouchableOpacity
                   onPress={() => {
                     setIsEditing(false);
+                    setSearchAddressQuery("");
+                    setSearchAddressResults([]);
                     // console.log("editing false")
                   }}
                 >
                   <Image
-                    source={require("../../../assets/icons/close.png")}
+                    source={require("@/assets/icons/close.png")}
                     style={styles.closeAddressInput}
                   />
                 </TouchableOpacity>
@@ -282,7 +283,7 @@ export default function Index() {
                   {address}
                 </Text>
                 <Image
-                  source={require("../../../assets/icons/edit.png")}
+                  source={require("@/assets/icons/edit.png")}
                   style={styles.changeAddress}
                 />
               </TouchableOpacity>

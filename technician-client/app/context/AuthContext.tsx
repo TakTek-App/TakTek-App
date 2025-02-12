@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 
 interface Service {
   id: number;
@@ -99,7 +101,7 @@ interface AuthContextType {
   fetchTechnicianInfo: (technicianId: number) => Promise<void>;
   createCall: (technicianId: number, userId: number) => Promise<void>;
   review: (userId: number, jobId: number, rating: number) => Promise<void>;
-  toggleAvailability: (technicianId: number, available: boolean) => Promise<void>;
+  deleteTechnician: () => Promise<void>;
   setStorageKey: (key: string, value: string | null) => Promise<void>;
 }
 
@@ -331,25 +333,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const toggleAvailability = async (technicianId: number, available: boolean) => {
+  const deleteTechnician = async () => {
+    if (!technician) return;
+  
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/${technicianId}`, {
-        method: 'PATCH',
+      const newEmail = uuidv4();
+  
+      const updatedTechnician = {
+        firstName: "",
+        lastName: "",
+        email: newEmail,
+        services: [],
+      };
+  
+      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/${technician.id}`, {
+        method: "PATCH",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ available }),
+        body: JSON.stringify(updatedTechnician),
       });
   
       if (!response.ok) {
-        throw new Error('Failed to toggle availability');
+        throw new Error("Failed to delete technician");
       }
   
-      console.log("Toggled availability successfully");
-      const technician = await response.json();
-      setTechnician(technician);
+      console.log("Technician deleted (anonymized) successfully");
+  
+      setTimeout(() => {
+        logOutTechnician();
+      }, 1500);
     } catch (error) {
-      console.error('Error toggling availability:', error);
+      console.error("Error deleting technician:", error);
+      throw error;
     }
   };
 
@@ -370,7 +386,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         fetchTechnicianInfo,
         createCall,
         review,
-        toggleAvailability,
+        deleteTechnician,
         setStorageKey,
       }}
     >
