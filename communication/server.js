@@ -1,22 +1,9 @@
-const express = require("express");
-const https = require("https");
-const { Server } = require("socket.io");
-
-const app = express();
-const server = https.createServer(app);
-const PORT = process.env.PORT || 3002;
-
-const io = new Server(server, {
+const io = require("socket.io")(3002, {
   cors: {
-    origin: "*", // Change to your frontend URL if needed
+    origin: "*",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   }
-});
-
-// Health check route
-app.get("/", (req, res) => {
-  res.send("Socket.io Server is Running!");
 });
 
 let peers = {}; // Store connected peers
@@ -288,8 +275,4 @@ io.on("connection", (socket) => {
       }
     });
   });
-});
-
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
 });
