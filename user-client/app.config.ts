@@ -14,11 +14,18 @@ export default ({config}: ConfigContext): ExpoConfig => ({
     "supportsTablet": false,
     "bundleIdentifier": "com.anonymous.userclient",
     "icon": "./assets/images/Icon IOS 1024x1024.png",
-    "infoPlist": {
-      NSLocationWhenInUseUsageDescription: "This app needs access to your location.",
-      NSMicrophoneUsageDescription: "This app needs access to your microphone.",
-      NSCameraUsageDescription: "This app needs access to your camera to take screenshots for your profil display."
-    }
+    infoPlist: {
+      NSLocationWhenInUseUsageDescription:
+        "This app needs access to your location to share it with other users.",
+      NSMicrophoneUsageDescription:
+        "This app needs access to your microphone to communicate with other users.",
+      NSCameraUsageDescription:
+        "This app needs access to your camera to take screenshots for your profile display.",
+      ITSAppUsesNonExemptEncryption: false,
+    },
+    config: {
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+    },
   },
   "android": {
     "adaptiveIcon": {
