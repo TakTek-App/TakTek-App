@@ -20,14 +20,25 @@ io.on("connection", (socket) => {
     else if(role === "technician") {
       peers[socket.id] = { ...data, available: false, companyId, company, rating, reviews, services };
     }
+    else if(role === "company") {
+      peers[socket.id] = { ...data, socketId }
+    }
     console.log(`Registered ${role}:`, socketId);
     console.log("Peers:", peers);
 
     if (role === "user") {
-      io.emit(
+      io.to(socket.id).emit(
         "peer-list",
         Object.values(peers).filter((peer) => peer.role === "technician")
       );
+    }
+
+    if (role === "company" && socketId) {
+      const companyTechnicians = Object.values(peers).filter(
+        (peer) => peer.role === "technician" && peer.companyId === socketId && peer.available
+      );
+
+      io.to(socket.id).emit("peer-list", companyTechnicians);
     }
   });
 
@@ -207,6 +218,15 @@ io.on("connection", (socket) => {
           io.to(peerSocketId).emit(
             "peer-list",
             Object.values(peers).filter((peer) => peer.role === "technician")
+          );
+        }
+      });
+
+      Object.keys(peers).forEach((peerSocketId) => {
+        if (peers[peerSocketId].role === "company") {
+          io.to(peerSocketId).emit(
+            "peer-list",
+            Object.values(peers).filter((peer) => peer.role === "technician" && peer.companyId === peers[peerSocketId].socketId && peer.available)
           );
         }
       });

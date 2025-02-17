@@ -60,7 +60,7 @@ interface Job {
   user: User;
   technician: Technician;
   service: Service;
-  technicianReview: Review
+  TechnicianReview: Review
 }
 
 interface Call {

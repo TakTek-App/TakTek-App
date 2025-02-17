@@ -58,7 +58,7 @@ const OrdersScreen = () => {
                 </View>
                 <View style={styles.headerSection}>
                     <Text style={styles.label}>Rating</Text>
-                    {renderStars(item.technicianReview?.rating)}
+                    {renderStars(item.TechnicianReview?.rating)}
                 </View>
             </View>
             <View style={styles.orderBody}>

@@ -28,6 +28,8 @@ import {
   RTCIceCandidate,
   mediaDevices,
 } from "react-native-webrtc";
+import { connected } from "process";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 
 interface Coords {
   latitude: number;
@@ -80,9 +82,10 @@ const Main = () => {
   const [clients, setClients] = useState<Client[]>([]); //
   const [requestingClient, setRequestingClient] = useState<Client>();
   const [rating, setRating] = useState(5);
+  const [loadingLocation, setLoadingLocation] = useState(true);
 
   const { client, setClient } = useClient();
-  const { setCoords } = useCoords();
+  const { coords, setCoords } = useCoords();
 
   const { socket, isConnected } = useSocket();
 
@@ -214,18 +217,33 @@ const Main = () => {
         },
         (location) => {
           const { latitude, longitude } = location.coords;
-          socket?.emit("send-location", {latitude, longitude});
+          setCoords({ latitude, longitude });
+          socket?.emit("send-location", { latitude, longitude });
           console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
         }
       );
     };
 
     startLocationTracking();
+    setLoadingLocation(false);
   }, []);
 
   useEffect(() => {
-    //
     if (!socket || !isConnected) return;
+    // setClient({
+    //   id: 1,
+    //   role: "user",
+    //   firstName: "John",
+    //   lastName: "Doe",
+    //   socketId: "abc123xyz",
+    //   photo: "https://example.com/photos/john-doe.jpg",
+    //   address: "123 Main St, New York, NY",
+    //   location: {
+    //     latitude: 6.2074576,
+    //     longitude: -75.5708091,
+    //   },
+    //   serviceName: "Locksmith",
+    // });
 
     setConnecting(false);
 
@@ -541,6 +559,8 @@ const Main = () => {
           requestingClient.serviceId
         );
         console.log("job", job);
+        setAvailable(false);
+        socket?.emit("toggle-availability", false);
       } else {
         console.error(
           "Failed to set up job: Missing required IDs",
@@ -596,313 +616,366 @@ const Main = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Hey, {technician?.firstName}!</Text>
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Your Rating</Text>
-          <Text style={styles.statValue}>{technician?.rating.toFixed(1)}</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Completed Orders</Text>
-          <Text style={styles.statValue}>{technician?.jobs.length}</Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Available for work?</Text>
-        <View style={styles.availableContainer}>
-          <Switch
-            style={{ transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }] }}
-            trackColor={{ false: colors.red, true: colors.accentGreen }}
-            thumbColor={"#fff"}
-            ios_backgroundColor={colors.red}
-            onValueChange={toggleAvailability}
-            value={available}
+    <View style={styles.container}>
+      {!loadingLocation && <MapView
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        region={{
+          latitude: coords?.latitude || 0,
+          longitude: coords?.longitude || 0,
+          latitudeDelta: 0.0112,
+          longitudeDelta: 0.0121,
+        }}
+      >
+        <Marker
+          coordinate={{
+            latitude: coords?.latitude || 0,
+            longitude: coords?.longitude || 0,
+          }}
+          title="Current Location"
+        >
+          <Image
+            source={require("../../../assets/icons/Location_icon.png")}
+            style={styles.currentLocationPin}
+            resizeMode="contain"
           />
+        </Marker>
+      </MapView>}
 
-          <Text style={styles.available}>
-            {available ? "Available" : "Busy"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order in Progress</Text>
-        {client ? (
-          <View style={styles.orderCard}>
-            <View style={styles.orderBody}>
-              <Text style={styles.label}>Address</Text>
-              <Text style={styles.orderContent}>{client.address}</Text>
-              <Text style={styles.label}>Type of work</Text>
-              <Text style={styles.orderContent}>{client.serviceName}</Text>
-              <Text style={styles.label}>Client</Text>
-              <View style={styles.clientContainer}>
-                <Image
-                  source={{ uri: client.photo }}
-                  style={styles.clientPhoto}
-                />
-                <View style={styles.clientInfo}>
-                  <Text style={styles.clientName}>
-                    {client.firstName} {client.lastName}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.callButton}>
-                <Image
-                  source={require("../../../assets/icons/phone.png")}
-                  style={styles.buttonIcon}
-                />
-                <Text style={styles.buttonText}>Call {client.firstName}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.mapButton} onPress={openMap}>
-                <Image
-                  source={require("../../../assets/icons/map.png")}
-                  style={styles.buttonIcon}
-                />
-                <Text style={styles.mapButtonText}>Switch to Map</Text>
-              </TouchableOpacity>
-            </View>
+      <ScrollView style={[styles.main, client && styles.mainClient]}>
+        <Text style={styles.title}>Hey, {technician?.firstName}!</Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Your Rating</Text>
+            <Text style={styles.statValue}>
+              {technician?.rating.toFixed(1)}
+            </Text>
           </View>
-        ) : (
-          <Text style={styles.noOrders}>No orders in progress.</Text>
-        )}
-      </View>
-
-      <Modal
-        visible={alertVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAlertVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Order</Text>
-            <View style={styles.orderBody}>
-              <Text style={styles.label}>Address</Text>
-              <Text style={styles.orderContent}>
-                {requestingClient?.address}
-              </Text>
-              <Text style={styles.label}>Type of work</Text>
-              <Text style={styles.orderContent}>
-                {requestingClient?.serviceName}
-              </Text>
-              <Text style={styles.label}>Client</Text>
-              <View style={styles.clientContainer}>
-                <Image
-                  source={{ uri: requestingClient?.photo }}
-                  style={styles.clientPhoto}
-                />
-                <View style={styles.clientInfo}>
-                  <Text style={styles.clientName}>
-                    {requestingClient?.firstName} {requestingClient?.lastName}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.callButton}
-                onPress={acceptRequest}
-              >
-                <Text style={styles.buttonText}>Accept</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.rejectButton}
-                onPress={rejectRequest}
-              >
-                <Text style={styles.buttonText}>Reject</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Completed Orders</Text>
+            <Text style={styles.statValue}>{technician?.jobs.filter((job) => job.completed).length}</Text>
           </View>
         </View>
-      </Modal>
 
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{modalContent.title}</Text>
-            <Text style={styles.modalMessage}>{modalContent.message}</Text>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.modalButtonText}>Close</Text>
-            </TouchableOpacity>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Available for work?</Text>
+          <View style={styles.availableContainer}>
+            <Switch
+              style={{ transform: [{ scaleX: 1.5 }, { scaleY: 1.5 }] }}
+              trackColor={{ false: colors.red, true: colors.accentGreen }}
+              thumbColor={"#fff"}
+              ios_backgroundColor={colors.red}
+              onValueChange={toggleAvailability}
+              value={available}
+            />
+
+            <Text style={styles.available}>
+              {available ? "Available" : "Busy"}
+            </Text>
           </View>
         </View>
-      </Modal>
 
-      <Modal
-        visible={noServicesVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setNoServicesVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{modalContent.title}</Text>
-            <Text style={styles.modalMessage}>{modalContent.message}</Text>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                setNoServicesVisible(false);
-                router.replace("/(tabs)/profile");
-              }}
-            >
-              <Text style={styles.modalButtonText}>Go to profile</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={reviewModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setReviewModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{modalContent.title}</Text>
-            <Text style={styles.modalMessage}>{modalContent.message}</Text>
-            <View style={styles.reviewStarsContainer}>
-              {[1, 2, 3, 4, 5].map((value) => (
-                <TouchableOpacity key={value} onPress={() => handleRate(value)}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Order in Progress</Text>
+          {client ? (
+            <View style={styles.orderCard}>
+              <View style={styles.orderBody}>
+                <Text style={styles.label}>Address</Text>
+                <Text style={styles.orderContent}>{client.address}</Text>
+                <Text style={styles.label}>Type of work</Text>
+                <Text style={styles.orderContent}>{client.serviceName}</Text>
+                <Text style={styles.label}>Client</Text>
+                <View style={styles.clientContainer}>
                   <Image
-                    source={require("@/assets/icons/Rate_Star.png")}
-                    style={[styles.reviewStar, value > rating && styles.staro]}
+                    source={{ uri: client.photo }}
+                    style={styles.clientPhoto}
                   />
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.orderBody}>
-              <Text style={styles.label}>Address</Text>
-              <Text style={styles.orderContent}>{client?.address}</Text>
-              <Text style={styles.label}>Type of work</Text>
-              <Text style={styles.orderContent}>{client?.firstName}</Text>
-              <Text style={styles.label}>Client</Text>
-              <View style={styles.clientContainer}>
-                <Image
-                  source={{ uri: client?.photo }}
-                  style={styles.clientPhoto}
-                />
-                <View style={styles.clientInfo}>
-                  <Text style={styles.clientName}>
-                    {client?.firstName} {client?.lastName}
-                  </Text>
+                  <View style={styles.clientInfo}>
+                    <Text style={styles.clientName}>
+                      {client.firstName} {client.lastName}
+                    </Text>
+                  </View>
                 </View>
+                <TouchableOpacity style={styles.callButton} onPress={startCall}>
+                  <Image
+                    source={require("../../../assets/icons/phone.png")}
+                    style={styles.buttonIcon}
+                  />
+                  <Text style={styles.buttonText}>Call {client.firstName}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mapButton} onPress={openMap}>
+                  <Image
+                    source={require("../../../assets/icons/map.png")}
+                    style={styles.buttonIcon}
+                  />
+                  <Text style={styles.mapButtonText}>Switch to Map</Text>
+                </TouchableOpacity>
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                submitRating();
-              }}
-            >
-              <Text style={styles.modalButtonText}>Submit</Text>
-            </TouchableOpacity>
-          </View>
+          ) : (
+            <Text style={styles.noOrders}>No orders in progress.</Text>
+          )}
         </View>
-      </Modal>
 
-      {/* Modal for Calls */}
-      <Modal
-        visible={callModalVisible}
-        transparent={true}
-        animationType="slide"
-      >
-        <View style={styles.callModalContainer}>
-          <View style={styles.callModalContent}>
-            {isCalling && !inCall && !incomingCall && (
-              <>
-                <Text style={styles.callModalText}>
-                  Calling {client?.firstName}
+        <Modal
+          visible={alertVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setAlertVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>New Order</Text>
+              <View style={styles.orderBody}>
+                <Text style={styles.label}>Address</Text>
+                <Text style={styles.orderContent}>
+                  {requestingClient?.address}
                 </Text>
-                <Image
-                  source={{ uri: client?.photo }}
-                  style={styles.callPhoto}
-                />
-                <TouchableOpacity
-                  style={styles.callModalButton}
-                  onPress={cancelCall}
-                >
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {inCall && !incomingCall && (
-              <>
-                <Text style={styles.callModalText}>
-                  In call with {client?.firstName}
+                <Text style={styles.label}>Type of work</Text>
+                <Text style={styles.orderContent}>
+                  {requestingClient?.serviceName}
                 </Text>
-                <Image
-                  source={{ uri: client?.photo }}
-                  style={styles.callPhoto}
-                />
-                <TouchableOpacity
-                  style={styles.callModalButton}
-                  onPress={endCall}
-                >
-                  <Text style={styles.buttonText}>End Call</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {incomingCall && inCall && (
-              <>
-                <Text style={styles.callModalText}>
-                  In call with {incomingCall.senderData.firstName}
-                </Text>
-                <Image
-                  source={{ uri: incomingCall.senderData.photo }}
-                  style={styles.callPhoto}
-                />
-                <TouchableOpacity
-                  style={styles.callModalButton}
-                  onPress={endCall}
-                >
-                  <Text style={styles.buttonText}>End Call</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {incomingCall && !inCall && (
-              <>
-                <Text style={styles.callModalText}>
-                  Incoming call from {incomingCall.senderData.firstName}
-                </Text>
-                <Image
-                  source={{ uri: incomingCall.senderData.photo }}
-                  style={styles.callPhoto}
-                />
-                <View style={{ flexDirection: "row", gap: 50 }}>
-                  <TouchableOpacity
-                    style={styles.callModalButton}
-                    onPress={acceptCall}
-                  >
-                    <Text style={styles.buttonText}>Accept Call</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.callModalButton}
-                    onPress={rejectCall}
-                  >
-                    <Text style={styles.buttonText}>Reject Call</Text>
-                  </TouchableOpacity>
+                <Text style={styles.label}>Client</Text>
+                <View style={styles.clientContainer}>
+                  <Image
+                    source={{ uri: requestingClient?.photo }}
+                    style={styles.clientPhoto}
+                  />
+                  <View style={styles.clientInfo}>
+                    <Text style={styles.clientName}>
+                      {requestingClient?.firstName} {requestingClient?.lastName}
+                    </Text>
+                  </View>
                 </View>
-              </>
-            )}
+                <TouchableOpacity
+                  style={styles.callButton}
+                  onPress={acceptRequest}
+                >
+                  <Text style={styles.buttonText}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.rejectButton}
+                  onPress={rejectRequest}
+                >
+                  <Text style={styles.buttonText}>Reject</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Modal visible={connecting} transparent animationType="fade">
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={"#fff"} />
-        </View>
-      </Modal>
-    </ScrollView>
+        <Modal
+          visible={modalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalContent.title}</Text>
+              <Text style={styles.modalMessage}>{modalContent.message}</Text>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={noServicesVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoServicesVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalContent.title}</Text>
+              <Text style={styles.modalMessage}>{modalContent.message}</Text>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  setNoServicesVisible(false);
+                  router.replace("/(tabs)/profile");
+                }}
+              >
+                <Text style={styles.modalButtonText}>Go to profile</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={reviewModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setReviewModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalContent.title}</Text>
+              <Text style={styles.modalMessage}>{modalContent.message}</Text>
+              <View style={styles.reviewStarsContainer}>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => handleRate(value)}
+                  >
+                    <Image
+                      source={require("@/assets/icons/Rate_Star.png")}
+                      style={[
+                        styles.reviewStar,
+                        value > rating && styles.staro,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.orderBody}>
+                <Text style={styles.label}>Address</Text>
+                <Text style={styles.orderContent}>{client?.address}</Text>
+                <Text style={styles.label}>Type of work</Text>
+                <Text style={styles.orderContent}>{client?.firstName}</Text>
+                <Text style={styles.label}>Client</Text>
+                <View style={styles.clientContainer}>
+                  <Image
+                    source={{ uri: client?.photo }}
+                    style={styles.clientPhoto}
+                  />
+                  <View style={styles.clientInfo}>
+                    <Text style={styles.clientName}>
+                      {client?.firstName} {client?.lastName}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  submitRating();
+                }}
+              >
+                <Text style={styles.modalButtonText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal for Calls */}
+        <Modal
+          visible={callModalVisible}
+          transparent={true}
+          animationType="slide"
+        >
+          <View style={styles.callModalContainer}>
+            <View style={styles.callModalContent}>
+              {isCalling && !inCall && !incomingCall && (
+                <>
+                  <Text style={styles.callModalText}>
+                    Calling {client?.firstName}
+                  </Text>
+                  <Image
+                    source={{ uri: client?.photo }}
+                    style={styles.callPhoto}
+                  />
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={cancelCall}
+                  >
+                    <Text style={styles.buttonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {inCall && !incomingCall && (
+                <>
+                  <Text style={styles.callModalText}>
+                    In call with {client?.firstName}
+                  </Text>
+                  <Image
+                    source={{ uri: client?.photo }}
+                    style={styles.callPhoto}
+                  />
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={endCall}
+                  >
+                    <Text style={styles.buttonText}>End Call</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {incomingCall && inCall && (
+                <>
+                  <Text style={styles.callModalText}>
+                    In call with {incomingCall.senderData.firstName}
+                  </Text>
+                  <Image
+                    source={{ uri: incomingCall.senderData.photo }}
+                    style={styles.callPhoto}
+                  />
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={endCall}
+                  >
+                    <Text style={styles.buttonText}>End Call</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {incomingCall && !inCall && (
+                <>
+                  <Text style={styles.callModalText}>
+                    Incoming call from {incomingCall.senderData.firstName}
+                  </Text>
+                  <Image
+                    source={{ uri: incomingCall.senderData.photo }}
+                    style={styles.callPhoto}
+                  />
+                  <View style={{ flexDirection: "row", gap: 50 }}>
+                    <TouchableOpacity
+                      style={styles.callModalButton}
+                      onPress={acceptCall}
+                    >
+                      <Text style={styles.buttonText}>Accept Call</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.callModalButton}
+                      onPress={rejectCall}
+                    >
+                      <Text style={styles.buttonText}>Reject Call</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={connecting} transparent animationType="fade">
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color={"#fff"} />
+          </View>
+        </Modal>
+      </ScrollView>
+
+      <View
+        style={[
+          {
+            position: "absolute",
+            bottom: 0,
+            right: 0,
+            backgroundColor: colors.text,
+            width: 5,
+            height: 5,
+            margin: 10,
+            borderRadius: 5,
+          },
+          isConnected
+            ? { backgroundColor: colors.green }
+            : { backgroundColor: colors.red },
+        ]}
+      ></View>
+    </View>
   );
 };
 
@@ -917,13 +990,32 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  map: {
+    height: "60%",
+  },
+  currentLocationPin: {
+    width: 50,
+  },
+  main: {
+    position: "absolute",
+    bottom: 0,
+    flex: 1,
+    height: "50%",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     backgroundColor: "#fff",
+  },
+  mainClient: {
+    height: "100%",
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    paddingTop: Platform.OS === "ios" ? 120 : 100,
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     margin: 20,
-    marginTop: Platform.OS === "ios"? 140:100,
   },
   statsContainer: {
     width: "100%",
@@ -950,7 +1042,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     marginBottom: 10,
-    textAlign: "center"
+    textAlign: "center",
   },
   statValue: {
     fontSize: 26,

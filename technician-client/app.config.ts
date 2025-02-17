@@ -22,6 +22,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSCameraUsageDescription:
         "This app needs access to your camera to take screenshots for your profile display.",
       ITSAppUsesNonExemptEncryption: false,
+      NSAllowsArbitraryLoads: true,
     },
     config: {
       googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,

@@ -23,6 +23,7 @@ import { BlurView } from "expo-blur";
 import { useTechnician } from "@/app/context/TechnicianContext";
 import { Audio } from "expo-av";
 import Constants from "expo-constants";
+import { useSocket } from "@/app/context/SocketContext";
 
 const GOOGLE_MAPS_API_KEY =
   Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
@@ -45,8 +46,19 @@ export default function Index() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
 
-  const { coords, setCoords, address, setAddress, city, setCity, country, setCountry } = useCoords();
+  const {
+    coords,
+    setCoords,
+    address,
+    setAddress,
+    city,
+    setCity,
+    country,
+    setCountry,
+  } = useCoords();
   const { technician } = useTechnician();
+
+  const { isConnected } = useSocket();
 
   const categoryImages: { [key: string]: any } = useMemo(
     () => ({
@@ -175,8 +187,14 @@ export default function Index() {
       const data = await response.json();
 
       if (data.status === "OK") {
-        setCoords({latitude: data.results[0].geometry.location.lat, longitude: data.results[0].geometry.location.lng});
-        console.log(data.results[0].geometry.location.lat, data.results[0].geometry.location.lng)
+        setCoords({
+          latitude: data.results[0].geometry.location.lat,
+          longitude: data.results[0].geometry.location.lng,
+        });
+        console.log(
+          data.results[0].geometry.location.lat,
+          data.results[0].geometry.location.lng
+        );
         setAddress(address);
       } else {
         setErrorMsg("Failed to fetch coordinates");
@@ -299,9 +317,7 @@ export default function Index() {
             data={searchAddressResults}
             keyExtractor={(item) => item.place_id}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => selectAddress(item.description)}
-              >
+              <TouchableOpacity onPress={() => selectAddress(item.description)}>
                 <Text style={styles.suggestion}>{item.description}</Text>
               </TouchableOpacity>
             )}
@@ -344,6 +360,23 @@ export default function Index() {
           )}
         </ScrollView>
       </View>
+      <View
+        style={[
+          {
+            position: "absolute",
+            bottom: 0,
+            right: 0,
+            backgroundColor: colors.text,
+            width: 5,
+            height: 5,
+            margin: 10,
+            borderRadius: 5,
+          },
+          isConnected
+            ? { backgroundColor: colors.green }
+            : { backgroundColor: colors.red },
+        ]}
+      ></View>
     </GestureHandlerRootView>
   );
 }
@@ -379,7 +412,8 @@ const styles = StyleSheet.create({
     top: -100,
     left: 20,
     right: 20,
-    backgroundColor: Platform.OS === "ios" ? "transparent": "rgba(255, 255, 255, 0.5)",
+    backgroundColor:
+      Platform.OS === "ios" ? "transparent" : "rgba(255, 255, 255, 0.5)",
     borderRadius: 20,
     borderWidth: 2,
     borderColor: "#fff",

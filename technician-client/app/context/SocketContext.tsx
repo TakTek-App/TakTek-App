@@ -19,8 +19,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!socketRef.current) {
       const newSocket = io(Constants.expoConfig?.extra?.expoPublic?.SIGNALING_SERVER, {
         transports: ["websocket"],
-        reconnectionAttempts: 5, // Limit retries to avoid infinite loops
-        reconnectionDelay: 3000, // Wait before retrying
+        reconnectionAttempts: 5,
+        reconnectionDelay: 3000,
       });
 
       socketRef.current = newSocket;
