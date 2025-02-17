@@ -126,6 +126,7 @@ io.on("connection", (socket) => {
 
   socket.on("send-location", (location) => {
     if (peers[socket.id]) {
+      console.log(`Received location from ${peers[socket.id].socketId}: ${location}` )
       peers[socket.id].location = location;
 
       Object.keys(peers).forEach((peerSocketId) => {
@@ -136,6 +137,8 @@ io.on("connection", (socket) => {
           );
         }
       });
+    } else {
+      console.log("There was a problem setting the location")
     }
   });
 
