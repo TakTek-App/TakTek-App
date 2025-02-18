@@ -46,11 +46,21 @@ io.on("connection", (socket) => {
 
   // Relay signaling messages
   socket.on("offer", ({ target, offer }) => {
-    console.log(`Offer received from ${socket.id} to ${target}`);
+    if (!peers[socket.id]) {
+      console.warn(`Offer failed: Peer ${peers[socket.id]} not found.`);
+      return;
+    }
+
+    if (!peers[socket.id].socketId) {
+      console.warn(`Peer ${socket.id} has no socketId property.`);
+      return;
+    }
+
+    console.log(`Offer received from ${peers[socket.id].socketId} to ${target}`);
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
       io.to(targetSocket).emit("offer", { offer, sender: peers[socket.id].socketId, senderData: peers[socket.id] });
-      console.log("Offer sent to:", targetSocket);
+      console.log("Offer sent to:", target);
     } else {
       console.log(`Target ${target} not found`);
     }
@@ -58,6 +68,16 @@ io.on("connection", (socket) => {
 
   // Handle call rejection
   socket.on("call-rejected", ({ target }) => {
+    if (!peers[socket.id]) {
+      console.warn(`Call reject failed: Peer ${peers[socket.id]} not found.`);
+      return;
+    }
+
+    if (!peers[socket.id].socketId) {
+      console.warn(`Peer ${socket.id} has no socketId property.`);
+      return;
+    }
+
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
       io.to(targetSocket).emit("call-rejected", {
@@ -69,14 +89,24 @@ io.on("connection", (socket) => {
 
   // Relay answer signaling
   socket.on("answer", ({ target, answer }) => {
-    console.log(`Answer received from ${socket.id} to ${target}`);
+    if (!peers[socket.id]) {
+      console.warn(`Answer failed: Peer ${peers[socket.id]} not found.`);
+      return;
+    }
+
+    if (!peers[socket.id].socketId) {
+      console.warn(`Peer ${socket.id} has no socketId property.`);
+      return;
+    }
+
+    console.log(`Answer received from ${peers[socket.id].socketId} to ${target}`);
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
       io.to(targetSocket).emit("answer", {
         answer,
         responderData: peers[socket.id],
       });
-      console.log("Answer sent to:", targetSocket);
+      console.log("Answer sent to:", target);
     } else {
       console.log(`Target ${target} not found`);
     }
@@ -84,11 +114,21 @@ io.on("connection", (socket) => {
 
   // Relay ICE candidates
   socket.on("ice-candidate", ({ target, candidate }) => {
-    console.log(`ICE candidate received from ${socket.id} to ${target}`);
+    if (!peers[socket.id]) {
+      console.warn(`Ice candidate failed: Peer ${peers[socket.id]} not found.`);
+      return;
+    }
+
+    if (!peers[socket.id].socketId) {
+      console.warn(`Peer ${socket.id} has no socketId property.`);
+      return;
+    }
+
+    console.log(`ICE candidate received from ${peers[socket.id].socketId} to ${target}`);
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
       io.to(targetSocket).emit("ice-candidate", { candidate });
-      console.log("ICE candidate sent to:", targetSocket);
+      console.log("ICE candidate sent to:", target);
     } else {
       console.log(`Target ${target} not found`);
     }
@@ -96,6 +136,16 @@ io.on("connection", (socket) => {
 
   // Handle call end
   socket.on("call-ended", ({ target }) => {
+    if (!peers[socket.id]) {
+      console.warn(`Call end failed: Peer ${peers[socket.id]} not found.`);
+      return;
+    }
+
+    if (!peers[socket.id].socketId) {
+      console.warn(`Peer ${socket.id} has no socketId property.`);
+      return;
+    }
+
     // Find the target socket ID using the target socket ID
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
   
@@ -111,6 +161,16 @@ io.on("connection", (socket) => {
   });
 
   socket.on("call-cancelled", ({ target }) => {
+    if (!peers[socket.id]) {
+      console.warn(`Call cancel failed: Peer ${peers[socket.id]} not found.`);
+      return;
+    }
+
+    if (!peers[socket.id].socketId) {
+      console.warn(`Peer ${socket.id} has no socketId property.`);
+      return;
+    }
+
     const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
     if (targetSocket) {
       io.to(targetSocket).emit("call-cancelled", {
