@@ -38,6 +38,7 @@ interface Coords {
 interface Technician {
   id: number;
   role: string;
+  canReceiveCalls: boolean;
   firstName: string;
   lastName: string;
   socketId: string;
@@ -341,9 +342,13 @@ export default function ServiceScreen() {
 
     socket?.emit("update-technician", {
       userSocketId: socketPeer.socketId,
-      technicianId: selectedTechnician.socketId,
+      technicianId: selectedTechnician.id,
     });
-    const peerConnection = createPeerConnection(selectedTechnician.companyId); // companyId or socketID
+    const peerConnection = createPeerConnection(
+      selectedTechnician.canReceiveCalls
+        ? selectedTechnician.socketId
+        : selectedTechnician.companyId
+    ); // companyId or socketID
 
     localStream
       .getTracks()
@@ -357,7 +362,12 @@ export default function ServiceScreen() {
       const offer = await peerConnection.createOffer(offerOptions);
       await peerConnection.setLocalDescription(offer);
 
-      socket?.emit("offer", { target: selectedTechnician.companyId, offer }); // companyId or socketID
+      socket?.emit("offer", {
+        target: selectedTechnician.canReceiveCalls
+          ? selectedTechnician.socketId
+          : selectedTechnician.companyId,
+        offer,
+      }); // companyId or socketID
       peerConnectionRef.current = peerConnection;
 
       setIsCalling(true);
@@ -407,7 +417,9 @@ export default function ServiceScreen() {
 
     resetCallState();
     socket?.emit("call-ended", {
-      target: selectedTechnician?.companyId || incomingCall?.sender,
+      target: selectedTechnician?.canReceiveCalls
+        ? selectedTechnician.socketId
+        : selectedTechnician?.companyId || incomingCall?.sender,
     }); // companyId or socketID
     setCalled(true);
     console.log("Call ended.");
@@ -415,7 +427,11 @@ export default function ServiceScreen() {
 
   const cancelCall = () => {
     if (isCalling) {
-      socket?.emit("call-cancelled", { target: selectedTechnician?.companyId }); // companyId or socketID
+      socket?.emit("call-cancelled", {
+        target: selectedTechnician?.canReceiveCalls
+          ? selectedTechnician.socketId
+          : selectedTechnician?.companyId,
+      }); // companyId or socketID
       console.log(`Call cancelled to ${selectedTechnician?.socketId}`);
       resetCallState();
     }

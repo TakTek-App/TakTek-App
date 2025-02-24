@@ -169,6 +169,7 @@ const Main = () => {
   const socketPeer = {
     id: technician?.id,
     role: "technician",
+    canReceiveCalls: technician?.canReceiveCalls,
     firstName: technician?.firstName,
     lastName: technician?.lastName,
     socketId: technician?.email,

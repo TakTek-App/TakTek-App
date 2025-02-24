@@ -73,6 +73,7 @@ interface Call {
 interface Technician {
   id: number;
   verified: boolean;
+  canReceiveCalls: boolean;
   email: string;
   firstName: string;
   lastName: string;

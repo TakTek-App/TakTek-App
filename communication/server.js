@@ -31,6 +31,7 @@ io.on("connection", (socket) => {
       location,
       services,
       technicianId,
+      canReceiveCalls,
     }) => {
       const data = { id, role, firstName, lastName, socketId, photo, location };
       if (role === "user") {
@@ -50,6 +51,7 @@ io.on("connection", (socket) => {
           rating,
           reviews,
           services,
+          canReceiveCalls,
         };
       } else if (role === "company") {
         peers[socket.id] = { ...data, socketId };
