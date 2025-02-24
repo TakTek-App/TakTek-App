@@ -30,6 +30,7 @@ import {
 } from "react-native-webrtc";
 import { connected } from "process";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import Constants from "expo-constants";
 
 interface Coords {
   latitude: number;
@@ -195,38 +196,33 @@ const Main = () => {
     }, 5000);
   }, []);
 
-  useEffect(() => {
-    const requestPermissions = async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Permission to access location was denied");
-        return false;
+  const requestPermissions = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      console.log("Permission to access location was denied");
+      return false;
+    }
+    return true;
+  };
+
+  const startLocationTracking = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 3000,
+        distanceInterval: 10,
+      },
+      (location) => {
+        const { latitude, longitude } = location.coords;
+        console.log(location.coords);
+        socket?.emit("send-location", { latitude, longitude });
+        console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
       }
-      return true;
-    };
-
-    const startLocationTracking = async () => {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) return;
-
-      Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 3000,
-          distanceInterval: 10,
-        },
-        (location) => {
-          const { latitude, longitude } = location.coords;
-          console.log(location.coords)
-          socket?.emit("send-location", {latitude: location.coords.latitude, longitude: location.coords.longitude});
-          console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
-        }
-      );
-    };
-
-    startLocationTracking();
-    setLoadingLocation(false);
-  }, []);
+    );
+  };
 
   useEffect(() => {
     if (!socket || !isConnected) return;
@@ -249,6 +245,9 @@ const Main = () => {
 
     socket?.emit("register", socketPeer);
     console.log("Registered as technician:", socketPeer.socketId);
+
+    startLocationTracking();
+    setLoadingLocation(false);
 
     console.log("Services:", socketPeer.services);
 
@@ -328,7 +327,6 @@ const Main = () => {
 
     socket?.on("service-ended", () => {
       handleReview();
-      setClient(null);
     });
 
     return () => {
@@ -417,7 +415,14 @@ const Main = () => {
 
   const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:relay1.expressturn.com:3478",
+          username: Constants.expoConfig?.extra?.expoPublic?.TURN_USERNAME,
+          credential: Constants.expoConfig?.extra?.expoPublic?.TURN_CREDENTIAL,
+        },
+      ],
     });
 
     peerConnection.addEventListener("track", (event) => {
@@ -539,6 +544,8 @@ const Main = () => {
 
   const acceptRequest = async () => {
     setAlertVisible(false);
+    setAvailable(false);
+    socket?.emit("toggle-availability", false);
     socket?.emit("hire-response", {
       response: "accept",
       clientId: requestingClient?.socketId,
@@ -559,8 +566,6 @@ const Main = () => {
           requestingClient.serviceId
         );
         console.log("job", job);
-        setAvailable(false);
-        socket?.emit("toggle-availability", false);
       } else {
         console.error(
           "Failed to set up job: Missing required IDs",
@@ -594,12 +599,12 @@ const Main = () => {
         technician.jobs[technician.jobs.length - 1].id,
         rating
       );
-      setReviewModalVisible(false);
-      setClient(null);
-      router.replace("/");
     } else {
       console.error("Client ID or Job ID is undefined");
     }
+    setReviewModalVisible(false);
+    setClient(null);
+    router.replace("/");
   };
 
   const showReviewModal = (title: string, message: string) => {
@@ -617,33 +622,37 @@ const Main = () => {
 
   return (
     <View style={styles.container}>
-      {!loadingLocation && <MapView
-        style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        region={{
-          latitude: coords?.latitude || 0,
-          longitude: coords?.longitude || 0,
-          latitudeDelta: 0.0112,
-          longitudeDelta: 0.0121,
-        }}
-      >
-        <Marker
-          coordinate={{
+      {!loadingLocation && (
+        <MapView
+          style={styles.map}
+          provider={PROVIDER_GOOGLE}
+          region={{
             latitude: coords?.latitude || 0,
             longitude: coords?.longitude || 0,
+            latitudeDelta: 0.0112,
+            longitudeDelta: 0.0121,
           }}
-          title="Current Location"
         >
-          <Image
-            source={require("../../../assets/icons/Location_icon.png")}
-            style={styles.currentLocationPin}
-            resizeMode="contain"
-          />
-        </Marker>
-      </MapView>}
+          <Marker
+            coordinate={{
+              latitude: coords?.latitude || 0,
+              longitude: coords?.longitude || 0,
+            }}
+            title="Current Location"
+          >
+            <Image
+              source={require("../../../assets/icons/Location_icon.png")}
+              style={styles.currentLocationPin}
+              resizeMode="contain"
+            />
+          </Marker>
+        </MapView>
+      )}
 
       <ScrollView style={[styles.main, client && styles.mainClient]}>
-        <Text style={styles.title}>Hey, {technician?.firstName}!</Text>
+        <Text style={[styles.title, client && styles.titleClient]}>
+          Hey, {technician?.firstName}!
+        </Text>
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Your Rating</Text>
@@ -653,7 +662,9 @@ const Main = () => {
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Completed Orders</Text>
-            <Text style={styles.statValue}>{technician?.jobs.filter((job) => job.completed).length}</Text>
+            <Text style={styles.statValue}>
+              {technician?.jobs.filter((job) => job.completed).length}
+            </Text>
           </View>
         </View>
 
@@ -1010,12 +1021,14 @@ const styles = StyleSheet.create({
     height: "100%",
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
-    paddingTop: Platform.OS === "ios" ? 120 : 100,
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     margin: 20,
+  },
+  titleClient: {
+    paddingTop: Platform.OS === "ios" ? 120 : 80,
   },
   statsContainer: {
     width: "100%",
@@ -1231,7 +1244,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   staro: {
-    tintColor: "#969696",
+    opacity: 0.2,
   },
   callModalContainer: {
     flex: 1,

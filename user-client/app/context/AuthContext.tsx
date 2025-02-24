@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
@@ -67,7 +73,7 @@ interface Job {
   user: User;
   technician: Technician;
   service: Service;
-  technicianReview: Review;
+  TechnicianReview: Review;
 }
 
 interface Call {
@@ -79,6 +85,7 @@ interface Call {
 
 interface User {
   id: number;
+  verified: boolean;
   email: string;
   firstName: string;
   lastName: string;
@@ -93,13 +100,23 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signUpUser: (firstName: string, lastName: string, email: string, phone: string, password: string) => Promise<void>;
+  signUpUser: (
+    firstName: string,
+    lastName: string,
+    email: string,
+    phone: string,
+    password: string
+  ) => Promise<void>;
   signInUser: (email: string, password: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => Promise<void>;
   logOutUser: () => Promise<void>;
   fetchUserInfo: (userId: number) => Promise<Job | null>;
   createCall: (userId: number, technicianId: number) => Promise<void>;
-  review: (technicianId: number, jobId: number, rating: number) => Promise<void>;
+  review: (
+    technicianId: number,
+    jobId: number,
+    rating: number
+  ) => Promise<void>;
   deleteUser: () => Promise<void>;
   setStorageKey: (key: string, value: string | null) => Promise<void>;
 }
@@ -119,7 +136,10 @@ async function getStorageItem(key: string): Promise<string | null> {
   }
 }
 
-async function setStorageItem(key: string, value: string | null): Promise<void> {
+async function setStorageItem(
+  key: string,
+  value: string | null
+): Promise<void> {
   if (Platform.OS === "web") {
     try {
       if (value === null) {
@@ -156,15 +176,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loadUserFromStorage();
   }, []);
 
-  const signUpUser = async (firstName: string, lastName: string, email: string, phone: string, password: string) => {
+  const signUpUser = async (
+    firstName: string,
+    lastName: string,
+    email: string,
+    phone: string,
+    password: string
+  ) => {
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ firstName, lastName, email, phone, password }),
-      });
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ firstName, lastName, email, phone, password }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Registration failed");
@@ -183,13 +212,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInUser = async (email: string, password: string) => {
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Invalid email or password");
@@ -208,13 +240,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
 
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${user.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updatedUser),
-      });
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${user.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatedUser),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to update user");
@@ -237,15 +272,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchUserInfo = async (userId: number) => {
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${userId}`, {
-        method: "GET",
-        headers: {
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${userId}`,
+        {
+          method: "GET",
+          headers: {
             "Content-Type": "application/json",
-        },
-      });
+          },
+        }
+      );
 
       if (!response.ok) {
-          throw new Error("Failed to fetch user information");
+        throw new Error("Failed to fetch user information");
       }
 
       const user = await response.json();
@@ -267,13 +305,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const createCall = async (userId: number, technicianId: number) => {
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/create-call`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId, technicianId }),
-      });
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/create-call`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ userId, technicianId }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to create a call");
@@ -288,15 +329,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const review = async (technicianId: number, jobId: number, rating: number) => {
+  const review = async (
+    technicianId: number,
+    jobId: number,
+    rating: number
+  ) => {
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/review`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ technicianId, jobId, rating }),
-      });
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/review`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ technicianId, jobId, rating }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to review");
@@ -312,32 +360,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteUser = async () => {
     if (!user) return;
-  
+
     try {
       const newEmail = uuidv4();
       const newPhone = uuidv4();
-  
+
       const updatedUser = {
         firstName: "",
         lastName: "",
         email: newEmail,
         phone: newPhone,
       };
-  
-      const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${user.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updatedUser),
-      });
-  
+
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/users/${user.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatedUser),
+        }
+      );
+
       if (!response.ok) {
         throw new Error("Failed to delete user");
       }
-  
+
       console.log("User deleted (anonymized) successfully");
-  
+
       setTimeout(() => {
         logOutUser();
       }, 1500);

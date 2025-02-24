@@ -9,70 +9,115 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  ActivityIndicator,
 } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import colors from "../../assets/colors/theme";
 import { Link, useRouter } from "expo-router";
 import { useAuth } from "../context/AuthContext";
+import Constants from "expo-constants";
 
-const messages = [
-  {
-    id: "1",
-    sender: "support",
-    message: "Hello! How can we assist you today?",
-    time: "10:00 AM",
-  },
-  {
-    id: "2",
-    sender: "user",
-    message: "I need help with a recent order.",
-    time: "10:02 AM",
-  },
-  {
-    id: "3",
-    sender: "support",
-    message: "Sure, could you please provide more details?",
-    time: "10:03 AM",
-  },
-];
+const SUPPORT_COOLDOWN_KEY = "lastSupportEmail";
+const DISABLE_DURATION = 180 * 60000;
 
 const SupportScreen = () => {
   const { user } = useAuth();
-  const [chatMessages, setChatMessages] = useState(messages);
-  const [inputMessage, setInputMessage] = useState("");
   const [photo, setPhoto] = useState({ uri: user?.photo || "" });
-  const [modalVisible, setModalVisible] = useState(true);
-  const [modalContent, setModalContent] = useState({
-    title: "Support is not available",
-    message: "We are working on it",
-  });
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalContent, setModalContent] = useState({ title: "", message: "" });
+  const [lastSentTimestamp, setLastSentTimestamp] = useState<number | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
 
-  const router = useRouter();
-
-  const handleSend = () => {
-    if (inputMessage.trim() === "") return;
-
-    const newMessage = {
-      id: `${chatMessages.length + 1}`,
-      sender: "user",
-      message: inputMessage,
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+  useEffect(() => {
+    const fetchLastSentTime = async () => {
+      const storedTimestamp = await SecureStore.getItemAsync(SUPPORT_COOLDOWN_KEY);
+      if (storedTimestamp) {
+        setLastSentTimestamp(parseInt(storedTimestamp, 10));
+      }
     };
 
-    setChatMessages([...chatMessages, newMessage]);
-    setInputMessage("");
-  };
+    fetchLastSentTime();
+
+    const interval = setInterval(() => {
+      if (lastSentTimestamp) {
+        const timePassed = Date.now() - lastSentTimestamp;
+        const remaining = Math.max((DISABLE_DURATION - timePassed) / 1000, 0);
+  
+        // if (remaining > 0) console.log(Math.ceil(remaining));
+  
+        if (remaining <= 0) {
+          setLastSentTimestamp(null);
+          setTimeRemaining(null);
+        } else {
+          const seconds = Math.ceil(remaining);
+          if (seconds >= 3600) {
+            setTimeRemaining(`${Math.floor(seconds / 3600)} hour(s) remaining`);
+          } else if (seconds >= 60) {
+            setTimeRemaining(`${Math.floor(seconds / 60)} minute(s) remaining`);
+          } else {
+            setTimeRemaining(`${seconds} second(s) remaining`);
+          }
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [lastSentTimestamp]);
 
   const showModal = (title: string, message: string) => {
     setModalContent({ title, message });
     setModalVisible(true);
   };
 
-  useEffect(() => {
-    showModal("Support is not available", "We are working on it");
-  }, []);
+  const canSubmit = () => {
+    if (!lastSentTimestamp) return true;
+    return Date.now() - lastSentTimestamp > DISABLE_DURATION;
+  };
+
+  const handleSupportSubmit = async () => {
+    if (!subject.trim() || !message.trim()) {
+      showModal("Error", "Both Subject and Message are required.");
+      return;
+    }
+
+    if (!canSubmit()) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(Constants.expoConfig?.extra?.expoPublic?.MAIL_SERVER, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: user?.email,
+          from: "tech@taktek.app",
+          subject,
+          text: message,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send support request.");
+      }
+
+      showModal("Success", "Your support request has been sent.");
+
+      const timestamp = Date.now();
+      setLastSentTimestamp(timestamp);
+      await SecureStore.setItemAsync(SUPPORT_COOLDOWN_KEY, timestamp.toString());
+
+      setSubject("");
+      setMessage("");
+    } catch (error) {
+      showModal("Error", "Failed to send support request. Try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -85,91 +130,52 @@ const SupportScreen = () => {
       </View>
 
       {/* Chat Body */}
-      <ScrollView contentContainerStyle={styles.chatContainer}>
-        {chatMessages.map((msg) => (
-          <View
-            key={msg.id}
-            style={[
-              styles.messageRow,
-              msg.sender === "user" ? styles.userRow : styles.supportRow,
-            ]}
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.main}>
+          <Text style={styles.mainTitle}>
+            Please send us a detailed message of your issue, we will be in touch with you soon!
+          </Text>
+          <Text style={styles.label}>Subject</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter the subject"
+            placeholderTextColor="#aaa"
+            value={subject}
+            onChangeText={setSubject}
+          />
+          <Text style={styles.label}>Message</Text>
+          <TextInput
+            style={[styles.input, styles.messageInput]}
+            placeholder="Describe your issue"
+            placeholderTextColor="#aaa"
+            value={message}
+            onChangeText={setMessage}
+            multiline
+            numberOfLines={4}
+          />
+          <TouchableOpacity
+            style={[styles.button, !canSubmit() && styles.buttonDisabled]}
+            onPress={handleSupportSubmit}
+            disabled={!canSubmit() || loading}
           >
-            {/* Support Image */}
-            {msg.sender === "support" && (
-              <Image
-                source={require("../../assets/images/logo.png")} // Replace with your support image
-                style={styles.messageImage}
-              />
-            )}
-
-            {/* Message Content */}
-            <View style={styles.messageCol}>
-              {msg.sender === "support" && (
-                <Text style={styles.supportTitle}>TakTek Support</Text>
-              )}
-              <View
-                style={[
-                  styles.messageContent,
-                  msg.sender === "user"
-                    ? styles.userContent
-                    : styles.supportContent,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.messageText,
-                    msg.sender === "user" && styles.userText,
-                  ]}
-                >
-                  {msg.message}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.messageTime,
-                  msg.sender === "user" ? styles.userTime : styles.supportTime,
-                ]}
-              >
-                {msg.time}
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {canSubmit() ? "Submit Request" : "Wait before sending another request"}
               </Text>
-            </View>
-
-            {/* User Image */}
-            {msg.sender === "user" && (
-              <Image
-                source={require("../../assets/images/logo.png")} // Replace with your user image
-                style={styles.messageImage}
-              />
             )}
-          </View>
-        ))}
+          </TouchableOpacity>
+          {!canSubmit() && <Text style={styles.timeText}>{timeRemaining}</Text>}
+        </View>
       </ScrollView>
-      {/* Input Area */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          placeholder="Type message"
-          placeholderTextColor={colors.border}
-          value={inputMessage}
-          onChangeText={setInputMessage}
-        />
-        <TouchableOpacity style={styles.micButton}>
-          <Image source={require("../../assets/icons/Mic.png")} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-          <Image source={require("../../assets/icons/Send.png")} />
-        </TouchableOpacity>
-      </View>
 
       {/* Modal for alerts */}
       <Modal
         visible={modalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setModalVisible(false);
-          router.replace("/");
-        }}
+        onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -177,27 +183,18 @@ const SupportScreen = () => {
             <Text style={styles.modalMessage}>{modalContent.message}</Text>
             <TouchableOpacity
               style={styles.modalButton}
-              onPress={() => {
-                setModalVisible(false);
-                router.replace("/");
-              }}
+              onPress={() => setModalVisible(false)}
             >
               <Text style={styles.modalButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      {!modalVisible && <View style={styles.overlay} />}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.5)",
-    zIndex: 10,
-  },
   container: {
     flex: 1,
     backgroundColor: "#fff",
@@ -226,92 +223,65 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#fff",
   },
-  chatContainer: {
-    padding: 15,
-  },
-  messageRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 15,
-  },
-  userRow: {
-    justifyContent: "flex-end",
-  },
-  supportRow: {
-    justifyContent: "flex-start",
-  },
-  messageImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginHorizontal: 10,
-  },
-  messageCol: {
-    flex: 1,
-  },
-  supportTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginBottom: 5,
-  },
-  messageContent: {
-    padding: 10,
-    borderRadius: 10,
-  },
-  userContent: {
-    backgroundColor: colors.primary,
-    borderTopRightRadius: 0,
-  },
-  supportContent: {
-    backgroundColor: colors.lightBlue,
-    borderTopLeftRadius: 0,
-  },
-  messageText: {
-    fontSize: 16,
-  },
-  userText: {
-    color: "#fff",
-  },
-  messageTime: {
-    fontSize: 12,
-    color: "#888",
-    marginTop: 5,
-  },
-  userTime: {
-    textAlign: "left",
-  },
-  supportTime: {
-    textAlign: "right",
-  },
-  inputContainer: {
-    flexDirection: "row",
+  scrollContainer: {
+    flexGrow: 1,
     alignItems: "center",
-    padding: 10,
+    paddingVertical: 20,
   },
-  textInput: {
-    flex: 1,
-    height: 50,
-    width: "90%",
-    backgroundColor: colors.lightBlue,
+  main: {
+    width: "100%",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  mainTitle: {
+    width: "95%",
+    textAlign: "center",
+    fontSize: 18,
+    marginBottom: 12,
+  },
+  label: {
+    width: "100%",
+    fontSize: 17,
+    color: colors.text,
+    paddingTop: 8,
+    paddingBottom: 5,
+  },
+  input: {
+    height: 40,
+    width: "100%",
+    backgroundColor: "#fff",
     borderColor: colors.primary,
     borderWidth: 1.5,
-    borderRadius: 15,
+    borderRadius: 10,
     marginBottom: 10,
-    paddingLeft: 60,
+    paddingLeft: 15,
     fontWeight: "500",
   },
-  micButton: {
-    position: "absolute",
-    width: 30,
-    height: 30,
-    left: 20,
-    top: 22,
+  messageInput: {
+    height: 100,
+    textAlignVertical: "top",
+    paddingVertical: 10,
   },
-  sendButton: {
-    position: "absolute",
-    width: 30,
-    height: 30,
-    right: 10,
+  button: {
+    width: "100%",
+    backgroundColor: colors.primary,
+    borderRadius: 50,
+    padding: 10,
+    alignItems: "center",
+    textAlign: "center",
+    marginTop: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: colors.text,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  timeText: {
+    fontSize: 14,
+    marginTop: 10,
   },
   modalOverlay: {
     flex: 1,
@@ -328,7 +298,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: 500,
+    fontWeight: "500",
     color: "#000",
     marginBottom: 10,
   },

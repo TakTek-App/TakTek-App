@@ -9,6 +9,8 @@ import {
   Image,
   Modal,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import colors from "../../assets/colors/theme";
@@ -38,7 +40,7 @@ const ForgotPasswordScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS === "ios" ? "padding": undefined}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.back()}
@@ -47,54 +49,58 @@ const ForgotPasswordScreen = () => {
             <Ionicons name="arrow-back" size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
-        <View style={styles.main}>
-          <Image
-            source={require("../../assets/images/logo.png")}
-            style={styles.logo}
-          />
-          <Text style={styles.technician}>For Technicians</Text>
-          <Text style={styles.title}>Forgot Password?</Text>
-          <Text style={styles.description}>
-            We will send a password reset link to your email address.
-          </Text>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor="#aaa"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-          />
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleForgotPassword}
-          >
-            <Text style={styles.buttonText}>Send</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Modal for alerts */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{modalContent.title}</Text>
-            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          
+          <View style={styles.main}>
+            <Image
+              source={require("../../assets/images/logo.png")}
+              style={styles.logo}
+            />
+            <Text style={styles.technician}>For Technicians</Text>
+            <Text style={styles.title}>Forgot Password?</Text>
+            <Text style={styles.description}>
+              We will send a password reset link to your email address.
+            </Text>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              placeholderTextColor="#aaa"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+            />
             <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => setModalVisible(false)}
+              style={styles.button}
+              onPress={handleForgotPassword}
             >
-              <Text style={styles.modalButtonText}>Close</Text>
+              <Text style={styles.buttonText}>Send</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+        
+
+        {/* Modal for alerts */}
+        <Modal
+          visible={modalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalContent.title}</Text>
+              <Text style={styles.modalMessage}>{modalContent.message}</Text>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -132,7 +138,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     alignItems: "center",
-    paddingBottom: 20,
+    minHeight: 600,
   },
   logo: {
     width: "70%",

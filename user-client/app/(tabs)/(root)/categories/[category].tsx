@@ -12,6 +12,7 @@ import {
   Image,
   ActivityIndicator,
   Platform,
+  Modal,
 } from "react-native";
 import * as Location from "expo-location";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
@@ -38,6 +39,8 @@ export default function Services() {
   const [searchAddressQuery, setSearchAddressQuery] = useState<string>("");
   const [searchAddressResults, setSearchAddressResults] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalContent, setModalContent] = useState({ title: "", message: "" });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
 
@@ -47,6 +50,11 @@ export default function Services() {
 
   const { coords, setCoords, address, setAddress, city, country } = useCoords();
   const { technician } = useTechnician();
+
+  const showModal = (title: string, message: string) => {
+    setModalContent({ title, message });
+    setModalVisible(true);
+  };
 
   const serviceImages: { [key: string]: any } = {
     roadsidehelp: require("@/assets/icons/Car - Roadside Help.png"),
@@ -142,7 +150,7 @@ export default function Services() {
         const response = await fetch(url);
         const data = await response.json();
 
-        if (data.status === "OK")setSearchAddressResults(data.predictions);
+        if (data.status === "OK") setSearchAddressResults(data.predictions);
         else setSearchAddressResults([]);
       } catch {
         setSearchAddressResults([]);
@@ -158,8 +166,14 @@ export default function Services() {
       const data = await response.json();
 
       if (data.status === "OK") {
-        setCoords({latitude: data.results[0].geometry.location.lat, longitude: data.results[0].geometry.location.lng});
-        console.log(data.results[0].geometry.location.lat, data.results[0].geometry.location.lng)
+        setCoords({
+          latitude: data.results[0].geometry.location.lat,
+          longitude: data.results[0].geometry.location.lng,
+        });
+        console.log(
+          data.results[0].geometry.location.lat,
+          data.results[0].geometry.location.lng
+        );
         setAddress(address);
       } else {
         setErrorMsg("Failed to fetch coordinates");
@@ -187,7 +201,7 @@ export default function Services() {
   }
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <View style={styles.container}>
       {/* Fullscreen Map */}
       {loadingCoords ? (
         <View
@@ -281,9 +295,7 @@ export default function Services() {
             data={searchAddressResults}
             keyExtractor={(item) => item.place_id}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => selectAddress(item.description)}
-              >
+              <TouchableOpacity onPress={() => selectAddress(item.description)}>
                 <Text style={styles.suggestion}>{item.description}</Text>
               </TouchableOpacity>
             )}
@@ -297,36 +309,78 @@ export default function Services() {
           {services && services.length > 0 ? (
             <>
               {services.map((service) => (
-                <Link
-                  href={{
-                    pathname: `../services/${service.name.toLowerCase().replace(/\s+/g, "-")}`,
-                    params: { id: service.id, name: service.name },
-                  }}
-                  key={service.id}
-                  style={styles.serviceButton}
-                >
-                  <View style={styles.serviceContent}>
-                    <Image
-                      source={
-                        serviceImages[
-                          service.name.toLowerCase().replace(/\s+/g, "")
-                        ]
+                <View key={service.id} style={styles.serviceButton}>
+                  {user && user.verified ? (
+                    <Link
+                      href={{
+                        pathname: `../services/${service.name.toLowerCase().replace(/\s+/g, "-")}`,
+                        params: { id: service.id, name: service.name },
+                      }}
+                    >
+                      <View style={styles.serviceContent}>
+                        <Image
+                          source={
+                            serviceImages[
+                              service.name.toLowerCase().replace(/\s+/g, "")
+                            ]
+                          }
+                          style={styles.serviceImage}
+                        />
+                        <Text style={styles.serviceText}>{service.name}</Text>
+                      </View>
+                    </Link>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.serviceContent}
+                      onPress={() =>
+                        showModal(
+                          "Please verify your account",
+                          "You must be verified to access this service. Please check your email for a verification link and sign in again."
+                        )
                       }
-                      style={styles.serviceImage}
-                    />
-                    <Text style={styles.serviceText}>{service.name}</Text>
-                  </View>
-                </Link>
+                    >
+                      <Image
+                        source={
+                          serviceImages[
+                            service.name.toLowerCase().replace(/\s+/g, "")
+                          ]
+                        }
+                        style={styles.serviceImage}
+                      />
+                      <Text style={styles.serviceText}>{service.name}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
             </>
           ) : (
             <View style={styles.servicesContainer}>
-              <Text>No services available at the moment.</Text>
+              <Text>Loading ...</Text>
             </View>
           )}
         </ScrollView>
       </View>
-    </GestureHandlerRootView>
+      {/* Modal for alerts */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -361,7 +415,8 @@ const styles = StyleSheet.create({
     top: -100,
     left: 20,
     right: 20,
-    backgroundColor: Platform.OS === "ios" ? "transparent": "rgba(255, 255, 255, 0.5)",
+    backgroundColor:
+      Platform.OS === "ios" ? "transparent" : "rgba(255, 255, 255, 0.5)",
     borderRadius: 20,
     borderWidth: 2,
     borderColor: "#fff",
@@ -487,5 +542,42 @@ const styles = StyleSheet.create({
   logo: {
     width: "80%",
     height: "30%",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  modalContent: {
+    width: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 15,
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 500,
+    color: "#000",
+    marginBottom: 10,
+  },
+  modalMessage: {
+    fontSize: 15,
+    color: "#000",
+    textAlign: "center",
+    marginBottom: 20,
+    width: "90%",
+  },
+  modalButton: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    borderRadius: 50,
+    width: "90%",
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });

@@ -99,7 +99,7 @@ export default function ServiceScreen() {
     photo: user?.photo,
     address: address,
     location: coords,
-    serviceId: id,
+    serviceId: parseInt(id as string),
     serviceName: name,
   };
 
@@ -188,6 +188,34 @@ export default function ServiceScreen() {
 
     getUserMedia();
 
+    socket?.on("hire-accepted", async (technicianData) => {
+      //
+      setWaiting(false);
+      console.log(`Technician ${technicianData.firstName} accepted the job!`);
+      setTechnician(technicianData);
+      if (socketPeer.id !== undefined) {
+        const job = await fetchUserInfo(socketPeer.id);
+        console.log(job);
+      } else {
+        console.error("socketPeer.id is undefined");
+      }
+      showAcceptAlert(
+        "Your address was sent to the technician",
+        "Your issue will be solved soon.."
+      );
+      setTimeout(() => router.replace("/(tabs)/(root)/contact/map"), 2000);
+    });
+
+    socket?.on("hire-rejected", (technicianData) => {
+      //
+      setWaiting(false);
+      showRejectAlert(
+        "Rejected",
+        `${technicianData?.firstName} rejected the job.`
+      );
+      console.log(`Technician ${technicianData.firstName} rejected the job.`);
+    });
+
     return () => {
       //
       socket?.off("peer-list");
@@ -248,11 +276,9 @@ export default function ServiceScreen() {
             new RTCSessionDescription(sessionDescription)
           );
           console.log("Remote description set successfully.");
-          console.log("selectedTechnician", selectedTechnician?.socketId);
 
           setInCall(true);
           setCallModalVisible(true);
-          console.log("selectedTechnician", selectedTechnician?.socketId);
         } catch (error) {
           console.error("Error setting remote description:", error);
         }
@@ -282,7 +308,14 @@ export default function ServiceScreen() {
 
   const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:relay1.expressturn.com:3478",
+          username: Constants.expoConfig?.extra?.expoPublic?.TURN_USERNAME,
+          credential: Constants.expoConfig?.extra?.expoPublic?.TURN_CREDENTIAL,
+        },
+      ],
     });
 
     peerConnection.addEventListener("track", (event) => {
@@ -306,6 +339,10 @@ export default function ServiceScreen() {
   const startCall = async () => {
     if (!localStream || !selectedTechnician) return;
 
+    socket?.emit("update-technician", {
+      userSocketId: socketPeer.socketId,
+      technicianId: selectedTechnician.socketId,
+    });
     const peerConnection = createPeerConnection(selectedTechnician.companyId); // companyId or socketID
 
     localStream
@@ -446,34 +483,6 @@ export default function ServiceScreen() {
       technicianId: technician.socketId,
       clientId: socketPeer.socketId,
     });
-
-    socket?.on("hire-accepted", async (technicianData) => {
-      //
-      setWaiting(false);
-      console.log(`Technician ${technicianData.firstName} accepted the job!`);
-      setTechnician(technicianData);
-      if (socketPeer.id !== undefined) {
-        const job = await fetchUserInfo(socketPeer.id);
-        console.log(job);
-      } else {
-        console.error("socketPeer.id is undefined");
-      }
-      showAcceptAlert(
-        "Your address was sent to the technician",
-        "Your issue will be solved soon.."
-      );
-      setTimeout(() => router.replace("/(tabs)/(root)/contact/map"), 2000);
-    });
-
-    socket?.on("hire-rejected", (technicianData) => {
-      //
-      setWaiting(false);
-      showRejectAlert(
-        "Rejected",
-        `${technicianData?.firstName} rejected the job.`
-      );
-      console.log(`Technician ${technicianData.firstName} rejected the job.`);
-    });
   };
 
   const openTechnician = (technician: Technician) => {
@@ -537,16 +546,17 @@ export default function ServiceScreen() {
   };
 
   const renderStars = (rating: number, reviews: number) => {
+    if (!rating) return;
     const fullStars = Math.floor(rating);
     const stars = [];
 
     for (let i = 0; i < 5; i++) {
-      const tintColor = i < fullStars ? undefined : colors.border;
+      const opacity = i < fullStars ? 1 : 0.2;
       stars.push(
         <Image
           key={i}
           source={require("../../../../assets/icons/Rate_Star.png")}
-          style={[styles.starIcon, { tintColor }]}
+          style={[styles.starIcon, { opacity }]}
         />
       );
     }
@@ -637,46 +647,36 @@ export default function ServiceScreen() {
       )}
 
       {/* Modal for Technician Details */}
-      <Modal
-        transparent
-        visible={isModalVisible}
-        animationType="slide"
-        onRequestClose={closeTechnician}
-      >
-        <Pressable
-          style={styles.overlay}
-          onPress={closeTechnician}
-          disabled={called}
-        />
-        <View style={styles.bottomSheet}>
-          {selectedTechnician && (
-            <>
-              {duration && <Text style={styles.time}>{duration} away</Text>}
-              <View style={styles.technicianCard}>
-                {selectedTechnician && (
-                  <Image
-                    source={{ uri: selectedTechnician.photo }}
-                    style={styles.technicianPhoto}
-                  />
-                )}
-                <View style={styles.technicianContainer}>
-                  <Text style={styles.technicianName}>
-                    {selectedTechnician &&
-                      `${selectedTechnician.firstName} ${selectedTechnician.lastName}`}
-                  </Text>
-                  <Text style={styles.technicianService}>{name}</Text>
-                  <Text style={styles.technicianCompany}>
-                    By {selectedTechnician && selectedTechnician.company}
-                  </Text>
-                  <View style={styles.technicianRating}>
-                    {renderStars(
-                      selectedTechnician.rating,
-                      selectedTechnician.reviews
-                    )}
-                  </View>
+      <View style={[styles.bottomSheet, !isModalVisible && { bottom: -30 }]}>
+        {selectedTechnician && (
+          <>
+            {duration && <Text style={styles.time}>{duration} away</Text>}
+            <View style={styles.technicianCard}>
+              {selectedTechnician && (
+                <Image
+                  source={{ uri: selectedTechnician.photo }}
+                  style={styles.technicianPhoto}
+                />
+              )}
+              <View style={styles.technicianContainer}>
+                <Text style={styles.technicianName}>
+                  {selectedTechnician &&
+                    `${selectedTechnician.firstName} ${selectedTechnician.lastName}`}
+                </Text>
+                <Text style={styles.technicianService}>{name}</Text>
+                <Text style={styles.technicianCompany}>
+                  By {selectedTechnician && selectedTechnician.company}
+                </Text>
+                <View style={styles.technicianRating}>
+                  {renderStars(
+                    selectedTechnician.rating,
+                    selectedTechnician.reviews
+                  )}
                 </View>
               </View>
-              {!called && (
+            </View>
+            {!called && (
+              <>
                 <TouchableOpacity
                   style={styles.callButton}
                   onPress={() => {
@@ -691,35 +691,44 @@ export default function ServiceScreen() {
                     Call {selectedTechnician.firstName}
                   </Text>
                 </TouchableOpacity>
-              )}
-              {called && (
-                <>
-                  <TouchableOpacity
-                    style={styles.hireButton}
-                    onPress={() => hireTechnician(selectedTechnician)}
-                    disabled={waiting}
-                  >
-                    <Text style={styles.buttonText}>
-                      {waiting
-                        ? "Waiting for technician..."
-                        : "Accept & Share address"}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={closeTechnician}
-                    disabled={waiting}
-                  >
-                    <Text style={styles.buttonText}>
-                      {waiting ? "Waiting for technician..." : "Change Vendor"}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </>
-          )}
-        </View>
-      </Modal>
+                <TouchableOpacity
+                  style={[
+                    styles.callButton,
+                    { padding: 12, backgroundColor: colors.primary },
+                  ]}
+                  onPress={closeTechnician}
+                >
+                  <Text style={styles.buttonText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {called && (
+              <>
+                <TouchableOpacity
+                  style={styles.hireButton}
+                  onPress={() => hireTechnician(selectedTechnician)}
+                  disabled={waiting}
+                >
+                  <Text style={styles.buttonText}>
+                    {waiting
+                      ? "Waiting for technician..."
+                      : "Accept & Share address"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={closeTechnician}
+                  disabled={waiting}
+                >
+                  <Text style={styles.buttonText}>
+                    {waiting ? "Waiting for technician..." : "Change Vendor"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </>
+        )}
+      </View>
 
       {/* Modal for alerts */}
       <Modal

@@ -17,12 +17,12 @@ const renderStars = (rating: number) => {
     const stars = [];
 
     for (let i = 0; i < 5; i++) {
-        const tintColor = i < fullStars ? undefined : colors.border;
+        const opacity = i < fullStars ? 1 : 0.2;
         stars.push(
             <Image
                 key={i}
                 source={require('../../assets/icons/Rate_Star.png')}
-                style={[styles.starIcon, { tintColor }]}
+                style={[styles.starIcon, { opacity }]}
             />
         );
     }
@@ -58,7 +58,7 @@ const OrdersScreen = () => {
                 </View>
                 <View style={styles.headerSection}>
                     <Text style={styles.label}>Rating</Text>
-                    {renderStars(item.technicianReview?.rating)}
+                    {renderStars(item.TechnicianReview?.rating)}
                 </View>
             </View>
             <View style={styles.orderBody}>

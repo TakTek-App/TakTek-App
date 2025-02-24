@@ -97,7 +97,7 @@ interface AuthContextType {
   signInTechnician: (email: string, password: string) => Promise<void>;
   updateTechnician: (updatedTechnician: Partial<Technician>, updatedServices: number[]) => Promise<void>;
   logOutTechnician: () => Promise<void>;
-  acceptJob: (technicianId: Number, userId: Number, serviceId: Number) => Promise<void>;
+  acceptJob: (technicianId: number, userId: number, serviceId: number) => Promise<void>;
   fetchTechnicianInfo: (technicianId: number) => Promise<void>;
   createCall: (technicianId: number, userId: number) => Promise<void>;
   review: (userId: number, jobId: number, rating: number) => Promise<void>;
@@ -239,7 +239,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await setStorageItem("auth_technician", null);
   };
 
-  const acceptJob = async (technicianId: Number, userId: Number, serviceId: Number) => {
+  const acceptJob = async (technicianId: number, userId: number, serviceId: number) => {
     try {
       const response = await fetch(`${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/technicians/accept-job`, {
         method: "POST",
@@ -250,7 +250,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (!response.ok) {
-        throw new Error("Invalid email or password");
+        throw new Error("Failed to accept job");
       }
 
       const updatedTechnician = await response.json();

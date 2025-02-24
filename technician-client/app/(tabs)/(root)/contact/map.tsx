@@ -1,20 +1,46 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, Platform, Modal } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, LatLng, Region, PROVIDER_DEFAULT } from 'react-native-maps';
-import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
-import { useRouter } from 'expo-router';
-import { useCoords } from '../../../context/CoordsContext';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Image,
+  Platform,
+  Modal,
+} from "react-native";
+import MapView, {
+  Marker,
+  PROVIDER_GOOGLE,
+  LatLng,
+  Region,
+  PROVIDER_DEFAULT,
+} from "react-native-maps";
+import {
+  GestureHandlerRootView,
+  ScrollView,
+} from "react-native-gesture-handler";
+import { useRouter } from "expo-router";
+import { useCoords } from "../../../context/CoordsContext";
 import { useClient } from "../../../context/ClientContext";
 import colors from "../../../../assets/colors/theme";
-import MapViewDirections from 'react-native-maps-directions';
+import MapViewDirections from "react-native-maps-directions";
 import { useSocket } from "@/app/context/SocketContext";
-import { useAuth } from '@/app/context/AuthContext';
-import { MediaStream, RTCPeerConnection,RTCSessionDescription, RTCIceCandidate, mediaDevices } from 'react-native-webrtc';
+import { useAuth } from "@/app/context/AuthContext";
+import {
+  MediaStream,
+  RTCPeerConnection,
+  RTCSessionDescription,
+  RTCIceCandidate,
+  mediaDevices,
+} from "react-native-webrtc";
 import Constants from "expo-constants";
 
-const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_API_KEY =
+  Constants.expoConfig?.extra?.expoPublic?.GOOGLE_MAPS_API_KEY;
 
-interface Peer { //
+interface Peer {
+  //
   userId: string;
   role: string;
   location: { lat: number; lng: number } | null;
@@ -31,7 +57,10 @@ const MapScreen: React.FC = () => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isCalling, setIsCalling] = useState(false);
   const [inCall, setInCall] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ sender: string; senderData: any } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{
+    sender: string;
+    senderData: any;
+  } | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
 
@@ -43,22 +72,23 @@ const MapScreen: React.FC = () => {
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalContent, setModalContent] = useState({ title: '', message: '' });
+  const [modalContent, setModalContent] = useState({ title: "", message: "" });
   const [callModalVisible, setCallModalVisible] = useState(false);
   const [rating, setRating] = useState(5);
   const router = useRouter();
 
-  const {coords, setCoords} = useCoords();
+  const { coords, setCoords } = useCoords();
   const { client, setClient } = useClient();
-  const [ arrived, setArrived ] = useState(false);
+  const [arrived, setArrived] = useState(false);
 
   const { socket } = useSocket();
   const [peerLocations, setPeerLocations] = useState<Peer[]>([]); //
 
-  const socketId = technician?.email
+  const socketId = technician?.email;
 
   useEffect(() => {
-    socket?.on("peer-list", (peers: Peer[]) => { //
+    socket?.on("peer-list", (peers: Peer[]) => {
+      //
       setPeerLocations(peers);
     });
 
@@ -71,16 +101,16 @@ const MapScreen: React.FC = () => {
 
     socket?.on("answer", handleAnswer);
     socket?.on("ice-candidate", handleIceCandidate);
-    socket?.on("call-rejected", ({senderData}) => {
+    socket?.on("call-rejected", ({ senderData }) => {
       resetCallState();
-      showModal("Rejected",`${senderData.firstName} rejected the call.`)
+      showModal("Rejected", `${senderData.firstName} rejected the call.`);
       setCallModalVisible(false);
       console.log("Call rejected.");
     });
 
     socket?.on("call-ended", ({ senderData }) => {
       resetCallState();
-      showModal("Ended",`${senderData.firstName} ended the call.`)
+      showModal("Ended", `${senderData.firstName} ended the call.`);
       console.log("Call ended.");
     });
 
@@ -93,7 +123,7 @@ const MapScreen: React.FC = () => {
       const constraints = { audio: true, video: false };
       try {
         const stream = await mediaDevices.getUserMedia(constraints);
-  
+
         if (stream.getAudioTracks().length === 0) {
           console.error("No audio tracks found.");
           return;
@@ -109,17 +139,18 @@ const MapScreen: React.FC = () => {
     getUserMedia();
 
     socket?.on("service-cancelled", () => {
-      showAlert("Service cancelled", `The service was cancelled`)
-      console.log("Service cancelled")
-      setClient(null)
+      showAlert("Service cancelled", `The service was cancelled`);
+      console.log("Service cancelled");
+      setClient(null);
     });
 
     socket?.on("service-ended", () => {
-      console.log("Service ended")
-      handleReview()
+      console.log("Service ended");
+      handleReview();
     });
 
-    return () => { //
+    return () => {
+      //
       socket?.off("peer-list");
       socket?.off("offer");
       socket?.off("answer");
@@ -153,8 +184,10 @@ const MapScreen: React.FC = () => {
     peerConnectionRef.current = peerConnection;
   };
 
-  const handleAnswer = async (answer: { answer: RTCSessionDescription } | null) => {
-    console.log(client?.socketId)
+  const handleAnswer = async (
+    answer: { answer: RTCSessionDescription } | null
+  ) => {
+    console.log(client?.socketId);
     if (answer && answer.answer) {
       const { answer: sessionDescription } = answer;
 
@@ -162,13 +195,15 @@ const MapScreen: React.FC = () => {
 
       if (peerConnectionRef.current) {
         try {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          await peerConnectionRef.current.setRemoteDescription(
+            new RTCSessionDescription(sessionDescription)
+          );
           console.log("Remote description set successfully.");
-          console.log(client?.socketId)
+          console.log(client?.socketId);
 
           setInCall(true);
           setCallModalVisible(true);
-          console.log(client?.socketId)
+          console.log(client?.socketId);
         } catch (error) {
           console.error("Error setting remote description:", error);
         }
@@ -178,11 +213,17 @@ const MapScreen: React.FC = () => {
     }
   };
 
-  const handleIceCandidate = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+  const handleIceCandidate = ({
+    candidate,
+  }: {
+    candidate: RTCIceCandidateInit;
+  }) => {
     console.log("Received ICE candidate:", candidate);
     if (peerConnectionRef.current) {
       if (peerConnectionRef.current.remoteDescription) {
-        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        peerConnectionRef.current.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
       } else {
         iceCandidateQueue.current.push(candidate);
         console.log("ICE candidate queued.");
@@ -192,17 +233,27 @@ const MapScreen: React.FC = () => {
 
   const createPeerConnection = (targetPeer: string): RTCPeerConnection => {
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:relay1.expressturn.com:3478",
+          username: Constants.expoConfig?.extra?.expoPublic?.TURN_USERNAME,
+          credential: Constants.expoConfig?.extra?.expoPublic?.TURN_CREDENTIAL,
+        },
+      ],
     });
 
-    peerConnection.addEventListener( 'track', event => {
+    peerConnection.addEventListener("track", (event) => {
       console.log("Remote stream received", event.streams[0]);
       setRemoteStream(event.streams[0]);
     });
 
-    peerConnection.addEventListener( 'icecandidate', event => {
+    peerConnection.addEventListener("icecandidate", (event) => {
       if (event.candidate) {
-        socket?.emit("ice-candidate", { target: targetPeer, candidate: event.candidate });
+        socket?.emit("ice-candidate", {
+          target: targetPeer,
+          candidate: event.candidate,
+        });
         console.log(`ICE candidate sent to: ${targetPeer}`);
       }
     });
@@ -215,7 +266,9 @@ const MapScreen: React.FC = () => {
 
     const peerConnection = createPeerConnection(client.socketId);
 
-    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+    localStream
+      .getTracks()
+      .forEach((track) => peerConnection.addTrack(track, localStream));
 
     const offerOptions = {
       offerToReceiveAudio: 1,
@@ -238,14 +291,16 @@ const MapScreen: React.FC = () => {
 
   const acceptCall = async () => {
     if (!incomingCall || !localStream) return;
-  
+
     const peerConnection = peerConnectionRef.current!;
-  
-    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-  
+
+    localStream
+      .getTracks()
+      .forEach((track) => peerConnection.addTrack(track, localStream));
+
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
-  
+
     socket?.emit("answer", { target: incomingCall.sender, answer });
 
     if (technician?.id) {
@@ -253,7 +308,7 @@ const MapScreen: React.FC = () => {
     } else {
       console.error("Technician ID is undefined");
     }
-  
+
     setInCall(true);
     setCallModalVisible(true);
     console.log(`Call accepted with ${incomingCall.sender}`);
@@ -274,13 +329,17 @@ const MapScreen: React.FC = () => {
     }
 
     resetCallState();
-    socket?.emit("call-ended", { target: client?.socketId || incomingCall?.sender });
+    socket?.emit("call-ended", {
+      target: client?.socketId || incomingCall?.sender,
+    });
     console.log("Call ended.");
   };
 
   const cancelCall = () => {
     if (isCalling) {
-      socket?.emit("call-cancelled", { target: client?.socketId || incomingCall?.sender });
+      socket?.emit("call-cancelled", {
+        target: client?.socketId || incomingCall?.sender,
+      });
       console.log(`Call cancelled to ${client?.socketId}`);
       resetCallState();
     }
@@ -297,17 +356,17 @@ const MapScreen: React.FC = () => {
   const cancelService = () => {
     socket?.emit("cancel-service", {
       clientId: client?.socketId,
-      technicianId: socketId
+      technicianId: socketId,
     });
-    handleReturn()
+    handleReturn();
   };
 
   const endService = () => {
     socket?.emit("end-service", {
       clientId: client?.socketId,
-      technicianId: socketId
+      technicianId: socketId,
     });
-    handleReview()
+    handleReview();
   };
 
   const showReviewModal = (title: string, message: string) => {
@@ -327,18 +386,18 @@ const MapScreen: React.FC = () => {
 
   useEffect(() => {
     (async () => {
-      console.log('coords', coords);
+      console.log("coords", coords);
       if (client && client.location && coords) {
-        setRouteCoordinates([coords, client.location])
+        setRouteCoordinates([coords, client.location]);
         await fetchDuration(coords, client.location);
       } else {
-        setErrorMsg('Coordinates not available');
+        setErrorMsg("Coordinates not available");
         setLoading(false);
       }
     })();
   }, []);
 
-  const fetchDuration = async (origin: Coords,destination: Coords) => {
+  const fetchDuration = async (origin: Coords, destination: Coords) => {
     try {
       const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_API_KEY}`;
       const response = await fetch(url);
@@ -347,11 +406,11 @@ const MapScreen: React.FC = () => {
       if (data.routes.length > 0) {
         const duration = data.routes[0].legs[0].duration.text;
         setDuration(duration);
-        const durationInSeconds = data.routes[0].legs[0].duration.value
+        const durationInSeconds = data.routes[0].legs[0].duration.value;
         if (durationInSeconds < 60) {
-          setArrived(true)
+          setArrived(true);
         } else {
-          setArrived(false)
+          setArrived(false);
         }
       } else {
         throw new Error("No route found");
@@ -364,13 +423,13 @@ const MapScreen: React.FC = () => {
     }
   };
 
-  const handleReturn = async() => {
-    setClient(null)
-    router.replace("/")
+  const handleReturn = async () => {
+    setClient(null);
+    router.replace("/");
   };
 
-  const handleReview = async() => {
-    showReviewModal("Order Completed", `Customer review`)
+  const handleReview = async () => {
+    showReviewModal("Order Completed", `Customer review`);
   };
 
   const handleRate = async (value: number) => {
@@ -378,20 +437,24 @@ const MapScreen: React.FC = () => {
   };
 
   const submitRating = async () => {
-    if (client?.id && technician?.jobs[technician.jobs.length-1]?.id) {
-      await review(client.id, technician.jobs[technician.jobs.length-1].id, rating);
-      setReviewModalVisible(false)
-      setClient(null)
-      router.replace("/")
+    if (client?.id && technician?.jobs[technician.jobs.length - 1]?.id) {
+      await review(
+        client.id,
+        technician.jobs[technician.jobs.length - 1].id,
+        rating
+      );
     } else {
       console.error("Client ID or Job ID is undefined");
     }
+    setReviewModalVisible(false);
+    setClient(null);
+    router.replace("/");
   };
 
   const simpleMapStyle = [
     {
-      featureType: 'poi',  // Hide points of interest (landmarks, parks, etc.)
-      stylers: [{ visibility: 'off' }],
+      featureType: "poi", // Hide points of interest (landmarks, parks, etc.)
+      stylers: [{ visibility: "off" }],
     },
     // {
     //   featureType: 'transit',  // Hide transit lines
@@ -403,76 +466,79 @@ const MapScreen: React.FC = () => {
     //   stylers: [{ visibility: 'off' }],
     // },
     {
-      featureType: 'water',  // Simplify water colors
-      stylers: [{ color: '#c9c9c9' }],
+      featureType: "water", // Simplify water colors
+      stylers: [{ color: "#c9c9c9" }],
     },
     {
-      featureType: 'landscape',  // Simplify landscape colors
-      stylers: [{ color: '#f5f5f5' }],
+      featureType: "landscape", // Simplify landscape colors
+      stylers: [{ color: "#f5f5f5" }],
     },
   ];
 
-  const openDashboard = ()  => {
-    router.back()
-  }
-  
+  const openDashboard = () => {
+    router.back();
+  };
+
   return (
     <GestureHandlerRootView style={styles.container}>
       {loading ? (
         <ActivityIndicator size="large" style={styles.loading} />
       ) : (
-      <MapView
-        style={{ height: "65%" }}
-        provider={PROVIDER_GOOGLE}
-        region={{
-          latitude: coords?.latitude ?? 0,
-          longitude: coords?.longitude ?? 0,
-          latitudeDelta: 0.0112,
-          longitudeDelta: 0.0121,
-        } as Region}
-        customMapStyle={simpleMapStyle}
-      >
-        <Marker
-          coordinate={{
-            latitude: coords?.latitude ?? 0,
-            longitude: coords?.longitude ?? 0,
-          }}
+        <MapView
+          style={{ height: "65%" }}
+          provider={PROVIDER_GOOGLE}
+          region={
+            {
+              latitude: coords?.latitude ?? 0,
+              longitude: coords?.longitude ?? 0,
+              latitudeDelta: 0.0112,
+              longitudeDelta: 0.0121,
+            } as Region
+          }
+          customMapStyle={simpleMapStyle}
         >
-          <Image
-            source={{ uri: technician?.photo }}
-            style={styles.markerImage}
-          />
-        </Marker>
-        <Marker
-          coordinate={{
-            latitude: client?.location?.latitude ?? 0,
-            longitude: client?.location?.longitude ?? 0,
-          }}
-          title="Destination"
-        >
-          <Image
-            source={require("../../../../assets/icons/Location_icon.png")}
-            style={styles.currentLocationPin}
-            resizeMode="contain"
-          />
-        </Marker>
-        {routeCoordinates.length > 0 && (
-          <MapViewDirections
-          origin={{
-            latitude: coords?.latitude ?? 0,
-            longitude: coords?.longitude ?? 0,
-          }}
-          destination={{
-            latitude: client?.location?.latitude ?? 0,
-            longitude: client?.location?.longitude ?? 0
-          }}
-          apikey={GOOGLE_MAPS_API_KEY || ''}
-          strokeWidth={4}
-          strokeColor={colors.primary}
-        />
-        )}
-      </MapView>)}
-      
+          <Marker
+            coordinate={{
+              latitude: coords?.latitude ?? 0,
+              longitude: coords?.longitude ?? 0,
+            }}
+          >
+            <Image
+              source={{ uri: technician?.photo }}
+              style={styles.markerImage}
+            />
+          </Marker>
+          <Marker
+            coordinate={{
+              latitude: client?.location?.latitude ?? 0,
+              longitude: client?.location?.longitude ?? 0,
+            }}
+            title="Destination"
+          >
+            <Image
+              source={require("../../../../assets/icons/Location_icon.png")}
+              style={styles.currentLocationPin}
+              resizeMode="contain"
+            />
+          </Marker>
+          {routeCoordinates.length > 0 && (
+            <MapViewDirections
+              origin={{
+                latitude: coords?.latitude ?? 0,
+                longitude: coords?.longitude ?? 0,
+              }}
+              destination={{
+                latitude: client?.location?.latitude ?? 0,
+                longitude: client?.location?.longitude ?? 0,
+              }}
+              apikey={GOOGLE_MAPS_API_KEY || ""}
+              strokeWidth={4}
+              strokeColor={colors.primary}
+            />
+          )}
+        </MapView>
+      )}
+
       <ScrollView style={styles.bottomSheet}>
         <Text style={styles.label}>Address</Text>
         <Text style={styles.orderContent}>{client?.address}</Text>
@@ -482,92 +548,114 @@ const MapScreen: React.FC = () => {
         <View style={styles.clientContainer}>
           <Image source={{ uri: client?.photo }} style={styles.clientPhoto} />
           <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>{client?.firstName} {client?.lastName}</Text>
+            <Text style={styles.clientName}>
+              {client?.firstName} {client?.lastName}
+            </Text>
           </View>
         </View>
         <TouchableOpacity style={styles.callButton} onPress={startCall}>
-          <Image source={require("../../../../assets/icons/phone.png")} style={styles.buttonIcon} />
+          <Image
+            source={require("../../../../assets/icons/phone.png")}
+            style={styles.buttonIcon}
+          />
           <Text style={styles.buttonText}>Call {client?.firstName}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.dashboardButton} onPress={openDashboard}>
-            <Image source={require("../../../../assets/icons/dashboard.png")} style={styles.buttonIcon} />
-            <Text style={styles.dashboardButtonText}>Switch to Dashboard</Text>
-          </TouchableOpacity>
-        {arrived?(
-          <TouchableOpacity style={styles.finishServiceButton} onPress={endService}>
+        <TouchableOpacity
+          style={styles.dashboardButton}
+          onPress={openDashboard}
+        >
+          <Image
+            source={require("../../../../assets/icons/dashboard.png")}
+            style={styles.buttonIcon}
+          />
+          <Text style={styles.dashboardButtonText}>Switch to Dashboard</Text>
+        </TouchableOpacity>
+        {arrived ? (
+          <TouchableOpacity
+            style={styles.finishServiceButton}
+            onPress={endService}
+          >
             <Text style={styles.buttonText}>The work is complete</Text>
           </TouchableOpacity>
-        ):(
-          <TouchableOpacity style={styles. cancelServiceButton} onPress={cancelService}>
+        ) : (
+          <TouchableOpacity
+            style={styles.cancelServiceButton}
+            onPress={cancelService}
+          >
             <Text style={styles.buttonText}>End contract</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
 
-    {/* Modal for alerts */}
-    <Modal
+      {/* Modal for alerts */}
+      <Modal
         visible={reviewModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setReviewModalVisible(false)}
-    >
+      >
         <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>{modalContent.title}</Text>
-                <Text style={styles.modalMessage}>{modalContent.message}</Text>
-                <View style={styles.reviewStarsContainer}>
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <TouchableOpacity key={value} onPress={() => handleRate(value)}>
-                    <Image
-                      source={require('../../../../assets/icons/Rate_Star.png')}
-                      style={[styles.reviewStar, value > rating && styles.staro]}
-                      />
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.orderBody}>
-                <Text style={styles.label}>Address</Text>
-                <Text style={styles.orderContent}>{client?.address}</Text>
-                <Text style={styles.label}>Type of work</Text>
-                <Text style={styles.orderContent}>{client?.serviceName}</Text>
-                <Text style={styles.label}>Client</Text>
-                <View style={styles.clientContainer}>
-                  <Image source={{ uri: client?.photo }} style={styles.clientPhoto} />
-                  <View style={styles.clientInfo}>
-                      <Text style={styles.clientName}>{client?.firstName} {client?.lastName}</Text>
-                  </View>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <View style={styles.reviewStarsContainer}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity key={value} onPress={() => handleRate(value)}>
+                  <Image
+                    source={require("../../../../assets/icons/Rate_Star.png")}
+                    style={[styles.reviewStar, value > rating && styles.staro]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.orderBody}>
+              <Text style={styles.label}>Address</Text>
+              <Text style={styles.orderContent}>{client?.address}</Text>
+              <Text style={styles.label}>Type of work</Text>
+              <Text style={styles.orderContent}>{client?.serviceName}</Text>
+              <Text style={styles.label}>Client</Text>
+              <View style={styles.clientContainer}>
+                <Image
+                  source={{ uri: client?.photo }}
+                  style={styles.clientPhoto}
+                />
+                <View style={styles.clientInfo}>
+                  <Text style={styles.clientName}>
+                    {client?.firstName} {client?.lastName}
+                  </Text>
                 </View>
               </View>
-                <TouchableOpacity
-                    style={styles.modalButton}
-                    onPress={() => {
-                      submitRating()
-                    }}
-                >
-                  <Text style={styles.modalButtonText}>Submit</Text>
-                </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                submitRating();
+              }}
+            >
+              <Text style={styles.modalButtonText}>Submit</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-    </Modal>
+      </Modal>
 
-    <Modal
+      <Modal
         visible={alertVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setAlertVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
+      >
+        <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{modalContent.title}</Text>
-              <Text style={styles.modalMessage}>{modalContent.message}</Text>
-              <TouchableOpacity
-                  style={styles.modalButton}
-                  onPress={() => {
-                    handleReturn()
-                  }}
-              >
-                  <Text style={styles.modalButtonText}>Close</Text>
-              </TouchableOpacity>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                handleReturn();
+              }}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -580,60 +668,99 @@ const MapScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{modalContent.title}</Text>
-              <Text style={styles.modalMessage}>{modalContent.message}</Text>
-              <TouchableOpacity
-                  style={styles.modalButton}
-                  onPress={() => {
-                    setModalVisible(false)
-                  }}
-              >
-                  <Text style={styles.modalButtonText}>Close</Text>
-              </TouchableOpacity>
+            <Text style={styles.modalTitle}>{modalContent.title}</Text>
+            <Text style={styles.modalMessage}>{modalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setModalVisible(false);
+              }}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       {/* Modal for Calls */}
-      <Modal visible={callModalVisible} transparent={true} animationType="slide">
+      <Modal
+        visible={callModalVisible}
+        transparent={true}
+        animationType="slide"
+      >
         <View style={styles.callModalContainer}>
           <View style={styles.callModalContent}>
             {isCalling && !inCall && !incomingCall && (
               <>
-              <Text style={styles.callModalText}>Calling {client?.firstName}</Text>
-              <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
-              <TouchableOpacity style={styles.callModalButton} onPress={cancelCall}>
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
+                <Text style={styles.callModalText}>
+                  Calling {client?.firstName}
+                </Text>
+                <Image
+                  source={{ uri: client?.photo }}
+                  style={styles.callPhoto}
+                />
+                <TouchableOpacity
+                  style={styles.callModalButton}
+                  onPress={cancelCall}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
               </>
             )}
             {inCall && !incomingCall && (
               <>
-                <Text style={styles.callModalText}>In call with {client?.firstName}</Text>
-                <Image source={{ uri: client?.photo }} style={styles.callPhoto} />
-                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                <Text style={styles.callModalText}>
+                  In call with {client?.firstName}
+                </Text>
+                <Image
+                  source={{ uri: client?.photo }}
+                  style={styles.callPhoto}
+                />
+                <TouchableOpacity
+                  style={styles.callModalButton}
+                  onPress={endCall}
+                >
                   <Text style={styles.buttonText}>End Call</Text>
                 </TouchableOpacity>
               </>
             )}
             {incomingCall && inCall && (
               <>
-                <Text style={styles.callModalText}>In call with {incomingCall.senderData.firstName }</Text>
-                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
-                <TouchableOpacity style={styles.callModalButton} onPress={endCall}>
+                <Text style={styles.callModalText}>
+                  In call with {incomingCall.senderData.firstName}
+                </Text>
+                <Image
+                  source={{ uri: incomingCall.senderData.photo }}
+                  style={styles.callPhoto}
+                />
+                <TouchableOpacity
+                  style={styles.callModalButton}
+                  onPress={endCall}
+                >
                   <Text style={styles.buttonText}>End Call</Text>
                 </TouchableOpacity>
               </>
             )}
             {incomingCall && !inCall && (
               <>
-                <Text style={styles.callModalText}>Incoming call from {incomingCall.senderData.firstName}</Text>
-                <Image source={{ uri: incomingCall.senderData.photo }} style={styles.callPhoto} />
+                <Text style={styles.callModalText}>
+                  Incoming call from {incomingCall.senderData.firstName}
+                </Text>
+                <Image
+                  source={{ uri: incomingCall.senderData.photo }}
+                  style={styles.callPhoto}
+                />
                 <View style={{ flexDirection: "row", gap: 50 }}>
-                  <TouchableOpacity style={styles.callModalButton} onPress={acceptCall}>
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={acceptCall}
+                  >
                     <Text style={styles.buttonText}>Accept Call</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.callModalButton} onPress={rejectCall}>
+                  <TouchableOpacity
+                    style={styles.callModalButton}
+                    onPress={rejectCall}
+                  >
                     <Text style={styles.buttonText}>Reject Call</Text>
                   </TouchableOpacity>
                 </View>
@@ -644,7 +771,7 @@ const MapScreen: React.FC = () => {
       </Modal>
     </GestureHandlerRootView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -652,8 +779,8 @@ const styles = StyleSheet.create({
   },
   loading: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   currentLocationPin: {
     width: 50,
@@ -684,7 +811,7 @@ const styles = StyleSheet.create({
   },
   time: {
     fontSize: 24,
-    color: colors.text
+    color: colors.text,
   },
   technicianCard: {
     flex: 1,
@@ -703,7 +830,7 @@ const styles = StyleSheet.create({
   },
   technicianName: {
     fontSize: 19,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   technicianService: {
     fontSize: 17,
@@ -713,22 +840,22 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   ratingNumber: {
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: "500",
     marginRight: 5,
   },
   ratings: {
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: "500",
     marginRight: 5,
     color: colors.text,
   },
   starsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   starIcon: {
     width: 16,
@@ -744,33 +871,33 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: colors.red,
     borderRadius: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   finishServiceButton: {
     marginBottom: 30,
     padding: 10,
     backgroundColor: colors.primary,
     borderRadius: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   reviewStarsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20
+    marginBottom: 20,
   },
   reviewStar: {
     width: 40,
-    height: 40
+    height: 40,
   },
   staro: {
-    tintColor: "#969696"
+    opacity: 0.2,
   },
   label: {
     fontSize: 17,
@@ -779,16 +906,16 @@ const styles = StyleSheet.create({
   },
   orderBody: {
     marginTop: 0,
-    width: "100%"
+    width: "100%",
   },
   orderContent: {
     fontSize: 17,
     marginBottom: 10,
   },
   clientContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 10
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 10,
   },
   clientPhoto: {
     width: 60,
@@ -797,12 +924,12 @@ const styles = StyleSheet.create({
     marginRight: 20,
   },
   clientInfo: {
-    flexDirection: 'column',
+    flexDirection: "column",
     flex: 1,
   },
   clientName: {
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 2,
   },
   callButton: {
@@ -810,15 +937,15 @@ const styles = StyleSheet.create({
     padding: 9,
     backgroundColor: colors.accentGreen,
     borderRadius: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   buttonIcon: {
     width: 25,
     height: 25,
-    marginRight: 10
+    marginRight: 10,
   },
   dashboardButton: {
     marginBottom: 10,
@@ -826,47 +953,47 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 2,
     borderColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    textAlign: 'center',
+    textAlign: "center",
   },
   buttonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "bold",
     fontSize: 16,
   },
   dashboardButtonText: {
     color: colors.primary,
-    textAlign: 'center',
-    fontWeight: 'bold',
+    textAlign: "center",
+    fontWeight: "bold",
     fontSize: 16,
   },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
   modalContent: {
-    width: '90%',
-    backgroundColor: '#fff',
+    width: "90%",
+    backgroundColor: "#fff",
     borderRadius: 15,
     padding: 20,
     paddingHorizontal: 30,
-    alignItems: 'center',
+    alignItems: "center",
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: 500,
-    color: '#000',
+    color: "#000",
     marginBottom: 10,
   },
   modalMessage: {
     fontSize: 15,
-    color: '#000',
-    textAlign: 'center',
+    color: "#000",
+    textAlign: "center",
     marginBottom: 20,
     width: "90%",
   },
@@ -875,12 +1002,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     padding: 10,
     borderRadius: 50,
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
   },
   modalButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
   },
   callModalContainer: {
     flex: 1,

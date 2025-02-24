@@ -3,7 +3,7 @@ const io = require("socket.io")(3002, {
     origin: "*",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
-  }
+  },
 });
 
 let peers = {}; // Store connected peers
@@ -12,33 +12,83 @@ io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
   // Register a peer
-  socket.on("register", async ({ id, role, firstName, lastName, address, socketId, photo, serviceId, serviceName, companyId, company, rating, reviews, location, services }) => {
-    const data = { id, role, firstName, lastName, socketId, photo, location };
-    if(role === "user") {
-      peers[socket.id] = { ...data, address, serviceId, serviceName};
-    }
-    else if(role === "technician") {
-      peers[socket.id] = { ...data, available: false, companyId, company, rating, reviews, services };
-    }
-    else if(role === "company") {
-      peers[socket.id] = { ...data, socketId }
-    }
-    console.log(`Registered ${role}:`, socketId);
-    console.log("Peers:", peers);
+  socket.on(
+    "register",
+    async ({
+      id,
+      role,
+      firstName,
+      lastName,
+      address,
+      socketId,
+      photo,
+      serviceId,
+      serviceName,
+      companyId,
+      company,
+      rating,
+      reviews,
+      location,
+      services,
+      technicianId,
+    }) => {
+      const data = { id, role, firstName, lastName, socketId, photo, location };
+      if (role === "user") {
+        peers[socket.id] = {
+          ...data,
+          address,
+          serviceId,
+          serviceName,
+          technicianId,
+        };
+      } else if (role === "technician") {
+        peers[socket.id] = {
+          ...data,
+          available: false,
+          companyId,
+          company,
+          rating,
+          reviews,
+          services,
+        };
+      } else if (role === "company") {
+        peers[socket.id] = { ...data, socketId };
+      }
+      console.log(`Registered ${role}:`, socketId);
+      console.log("Peers:", peers);
 
-    if (role === "user") {
-      io.to(socket.id).emit(
-        "peer-list",
-        Object.values(peers).filter((peer) => peer.role === "technician")
+      if (role === "user") {
+        io.to(socket.id).emit(
+          "peer-list",
+          Object.values(peers).filter((peer) => peer.role === "technician")
+        );
+      }
+
+      if (role === "company" && socketId) {
+        const companyTechnicians = Object.values(peers).filter(
+          (peer) =>
+            peer.role === "technician" &&
+            peer.companyId === socketId &&
+            peer.available
+        );
+
+        io.to(socket.id).emit("peer-list", companyTechnicians);
+      }
+    }
+  );
+
+  socket.on("update-technician", ({ userSocketId, technicianId }) => {
+    if (peers[socket.id].socketId === userSocketId) {
+      peers[socket.id].technicianId = technicianId;
+      console.log(
+        `Updated user ${userSocketId} with technicianId: ${technicianId}`
       );
-    }
 
-    if (role === "company" && socketId) {
-      const companyTechnicians = Object.values(peers).filter(
-        (peer) => peer.role === "technician" && peer.companyId === socketId && peer.available
-      );
-
-      io.to(socket.id).emit("peer-list", companyTechnicians);
+      // // Notify the user that their technicianId has been updated
+      // io.to(userSocketId).emit("technician-updated", {
+      //   technicianId,
+      //   message: "Your technician has been assigned.",
+      // });
     }
   });
 
@@ -56,10 +106,18 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log(`Offer received from ${peers[socket.id].socketId} to ${target}`);
-    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
+    console.log(
+      `Offer received from ${peers[socket.id].socketId} to ${target}`
+    );
+    const targetSocket = Object.keys(peers).find(
+      (key) => peers[key].socketId === target
+    );
     if (targetSocket) {
-      io.to(targetSocket).emit("offer", { offer, sender: peers[socket.id].socketId, senderData: peers[socket.id] });
+      io.to(targetSocket).emit("offer", {
+        offer,
+        sender: peers[socket.id].socketId,
+        senderData: peers[socket.id],
+      });
       console.log("Offer sent to:", target);
     } else {
       console.log(`Target ${target} not found`);
@@ -78,7 +136,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
+    const targetSocket = Object.keys(peers).find(
+      (key) => peers[key].socketId === target
+    );
     if (targetSocket) {
       io.to(targetSocket).emit("call-rejected", {
         senderData: peers[socket.id],
@@ -99,8 +159,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log(`Answer received from ${peers[socket.id].socketId} to ${target}`);
-    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
+    console.log(
+      `Answer received from ${peers[socket.id].socketId} to ${target}`
+    );
+    const targetSocket = Object.keys(peers).find(
+      (key) => peers[key].socketId === target
+    );
     if (targetSocket) {
       io.to(targetSocket).emit("answer", {
         answer,
@@ -124,8 +188,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log(`ICE candidate received from ${peers[socket.id].socketId} to ${target}`);
-    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
+    console.log(
+      `ICE candidate received from ${peers[socket.id].socketId} to ${target}`
+    );
+    const targetSocket = Object.keys(peers).find(
+      (key) => peers[key].socketId === target
+    );
     if (targetSocket) {
       io.to(targetSocket).emit("ice-candidate", { candidate });
       console.log("ICE candidate sent to:", target);
@@ -147,8 +215,10 @@ io.on("connection", (socket) => {
     }
 
     // Find the target socket ID using the target socket ID
-    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
-  
+    const targetSocket = Object.keys(peers).find(
+      (key) => peers[key].socketId === target
+    );
+
     if (targetSocket) {
       // Emit the "call-ended" event to the target peer
       io.to(targetSocket).emit("call-ended", {
@@ -171,12 +241,16 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const targetSocket = Object.keys(peers).find((key) => peers[key].socketId === target);
+    const targetSocket = Object.keys(peers).find(
+      (key) => peers[key].socketId === target
+    );
     if (targetSocket) {
       io.to(targetSocket).emit("call-cancelled", {
         senderData: peers[socket.id], // Include full data of the person canceling the call
       });
-      console.log(`Call cancelled by ${peers[socket.id].socketId} with ${target}`);
+      console.log(
+        `Call cancelled by ${peers[socket.id].socketId} with ${target}`
+      );
     } else {
       console.log("Target socket not found for call cancel.");
     }
@@ -186,7 +260,9 @@ io.on("connection", (socket) => {
 
   socket.on("send-location", (location) => {
     if (peers[socket.id]) {
-      console.log(`Received location from ${peers[socket.id].socketId}: ${location}` )
+      console.log(
+        `Received location from ${peers[socket.id].socketId}: ${location}`
+      );
       peers[socket.id].location = location;
 
       Object.keys(peers).forEach((peerSocketId) => {
@@ -198,7 +274,7 @@ io.on("connection", (socket) => {
         }
       });
     } else {
-      console.log("There was a problem setting the location")
+      console.log("There was a problem setting the location");
     }
   });
 
@@ -289,7 +365,12 @@ io.on("connection", (socket) => {
         if (peers[peerSocketId].role === "company") {
           io.to(peerSocketId).emit(
             "peer-list",
-            Object.values(peers).filter((peer) => peer.role === "technician" && peer.companyId === peers[peerSocketId].socketId && peer.available)
+            Object.values(peers).filter(
+              (peer) =>
+                peer.role === "technician" &&
+                peer.companyId === peers[peerSocketId].socketId &&
+                peer.available
+            )
           );
         }
       });
