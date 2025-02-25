@@ -28,7 +28,6 @@ import {
   RTCIceCandidate,
   mediaDevices,
 } from "react-native-webrtc";
-import { connected } from "process";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import Constants from "expo-constants";
 

@@ -33,6 +33,11 @@ io.on("connection", (socket) => {
       technicianId,
       canReceiveCalls,
     }) => {
+      if (peers[socket.id]) {
+        console.log(`User ${peers[socket.id].socketId} is already registered.`);
+        return; // Prevent re-registration
+      }
+
       const data = { id, role, firstName, lastName, socketId, photo, location };
       if (role === "user") {
         peers[socket.id] = {

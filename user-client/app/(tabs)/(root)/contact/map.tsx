@@ -77,7 +77,7 @@ const MapScreen: React.FC = () => {
   const [rating, setRating] = useState(5);
   const router = useRouter();
 
-  const { coords } = useCoords();
+  const { coords, address } = useCoords();
   const { technician, setTechnician } = useTechnician();
   const [arrived, setArrived] = useState(false);
 
@@ -86,11 +86,26 @@ const MapScreen: React.FC = () => {
 
   const [callModalVisible, setCallModalVisible] = useState(false);
 
-  const socketId = user?.email;
+  const socketPeer = {
+    id: user?.id,
+    role: "user",
+    firstName: user?.firstName,
+    lastName: user?.lastName,
+    socketId: user?.email,
+    photo: user?.photo,
+    address: address,
+    location: coords,
+    // serviceId: parseInt(id as string),
+    // serviceName: name,
+  };
 
   const lastLocationRef = useRef<Coords | null>(technician?.location || null);
 
   useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    socket?.emit("register", socketPeer);
+
     socket?.on("peer-list", (technicians: Technician[]) => {
       //
       setPeerLocations(technicians);
@@ -167,7 +182,7 @@ const MapScreen: React.FC = () => {
       socket?.off("service-cancelled");
       socket?.off("service-ended");
     };
-  }, []);
+  }, [socket, isConnected]);
 
   useEffect(() => {
     if (inCall && !remoteStream) {
@@ -350,7 +365,7 @@ const MapScreen: React.FC = () => {
 
   const cancelService = () => {
     socket?.emit("cancel-service", {
-      clientId: socketId,
+      clientId: socketPeer.socketId,
       technicianId: technician?.socketId,
     });
     handleReturn();
@@ -358,7 +373,7 @@ const MapScreen: React.FC = () => {
 
   const endService = () => {
     socket?.emit("end-service", {
-      clientId: socketId,
+      clientId: socketPeer.socketId,
       technicianId: technician?.socketId,
     });
     handleReview();

@@ -88,7 +88,7 @@ export default function ServiceScreen() {
 
   const { coords, address } = useCoords();
 
-  const [called, setCalled] = useState(false);
+  const [called, setCalled] = useState(true);
 
   const { socket } = useSocket();
   const socketPeer = {
