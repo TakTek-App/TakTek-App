@@ -70,7 +70,9 @@ io.on("connection", (socket) => {
       if (role === "user") {
         io.to(socket.id).emit(
           "peer-list",
-          Object.values(peers).filter((peer) => peer.role === "technician")
+          Object.values(peers).filter(
+            (peer) => peer.role === "technician" || peer.role === "agent"
+          )
         );
       }
 
