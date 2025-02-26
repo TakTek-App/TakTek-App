@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "TakTek for technicians",
   slug: "technician-client",
-  version: "1.0.1",
+  version: "1.0.2",
   orientation: "portrait",
   icon: "./assets/images/Icon IOS 1024x1024.jpg",
   scheme: "myapp",

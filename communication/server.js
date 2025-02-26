@@ -59,8 +59,11 @@ io.on("connection", (socket) => {
           canReceiveCalls,
         };
       } else if (role === "company") {
-        peers[socket.id] = { ...data, socketId };
+        peers[socket.id] = { ...data };
+      } else if (role === "agent") {
+        peers[socket.id] = { ...data, companyId, available: false };
       }
+
       console.log(`Registered ${role}:`, socketId);
       console.log("Peers:", peers);
 
@@ -71,11 +74,22 @@ io.on("connection", (socket) => {
         );
       }
 
-      if (role === "company" && socketId) {
+      if (role === "company") {
         const companyTechnicians = Object.values(peers).filter(
           (peer) =>
             peer.role === "technician" &&
             peer.companyId === socketId &&
+            peer.available
+        );
+
+        io.to(socket.id).emit("peer-list", companyTechnicians);
+      }
+
+      if (role === "agent") {
+        const companyTechnicians = Object.values(peers).filter(
+          (peer) =>
+            peer.role === "technician" &&
+            peer.companyId === companyId &&
             peer.available
         );
 

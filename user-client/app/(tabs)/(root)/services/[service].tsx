@@ -67,7 +67,7 @@ export default function ServiceScreen() {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
 
-  const { user, loading, fetchUserInfo, createCall } = useAuth();
+  const { user, loading, fetchUserInfo, createCall, fetchCompany } = useAuth();
   const { id, name } = useLocalSearchParams();
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [acceptAlertVisible, setAcceptAlertVisible] = useState(false);
@@ -344,6 +344,10 @@ export default function ServiceScreen() {
       userSocketId: socketPeer.socketId,
       technicianId: selectedTechnician.id,
     });
+
+    const company = await fetchCompany(selectedTechnician.companyId);
+    console.log("company", company);
+
     const peerConnection = createPeerConnection(
       selectedTechnician.canReceiveCalls
         ? selectedTechnician.socketId

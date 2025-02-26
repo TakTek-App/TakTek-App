@@ -217,7 +217,7 @@ const Main = () => {
       },
       (location) => {
         const { latitude, longitude } = location.coords;
-        console.log(location.coords);
+        setCoords({ latitude, longitude });
         socket?.emit("send-location", { latitude, longitude });
         console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
       }

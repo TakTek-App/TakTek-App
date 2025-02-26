@@ -118,6 +118,7 @@ interface AuthContextType {
     rating: number
   ) => Promise<void>;
   deleteUser: () => Promise<void>;
+  fetchCompany: (companyId: string) => Promise<Company>;
   setStorageKey: (key: string, value: string | null) => Promise<void>;
 }
 
@@ -398,6 +399,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const fetchCompany = async (companyId: string) => {
+    try {
+      const response = await fetch(
+        `${Constants.expoConfig?.extra?.expoPublic?.DB_SERVER}/companies/${companyId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch company information");
+      }
+
+      const company = await response.json();
+      return company;
+    } catch (error) {
+      console.error("Error fetching company info", error);
+      throw error;
+    }
+  };
+
   const setStorageKey = async (key: string, value: string | null) => {
     await setStorageItem(key, value);
   };
@@ -415,6 +440,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createCall,
         review,
         deleteUser,
+        fetchCompany,
         setStorageKey,
       }}
     >
