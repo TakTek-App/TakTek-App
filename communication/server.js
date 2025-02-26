@@ -68,6 +68,11 @@ io.on("connection", (socket) => {
       console.log("Peers:", peers);
 
       if (role === "user") {
+        console.log(
+          Object.values(peers).filter(
+            (peer) => peer.role === "technician" || peer.role === "agent"
+          )
+        );
         io.to(socket.id).emit(
           "peer-list",
           Object.values(peers).filter(
@@ -77,14 +82,15 @@ io.on("connection", (socket) => {
       }
 
       if (role === "company") {
-        const companyTechnicians = Object.values(peers).filter(
-          (peer) =>
-            peer.role === "technician" &&
-            peer.companyId === socketId &&
-            peer.available
+        io.to(socket.id).emit(
+          "peer-list",
+          Object.values(peers).filter(
+            (peer) =>
+              peer.role === "technician" &&
+              peer.companyId === socketId &&
+              peer.available
+          )
         );
-
-        io.to(socket.id).emit("peer-list", companyTechnicians);
       }
 
       if (role === "agent") {
@@ -292,7 +298,9 @@ io.on("connection", (socket) => {
         if (peers[peerSocketId].role === "user") {
           io.to(peerSocketId).emit(
             "peer-list",
-            Object.values(peers).filter((peer) => peer.role === "technician")
+            Object.values(peers).filter(
+              (peer) => peer.role === "technician" || peer.role === "agent"
+            )
           );
         }
       });
@@ -372,19 +380,21 @@ io.on("connection", (socket) => {
   });
 
   socket.on("toggle-availability", (available) => {
-    if (peers[socket.id] && peers[socket.id].role === "technician") {
+    if (
+      (peers[socket.id] && peers[socket.id].role === "technician") ||
+      peers[socket.id].role === "agent"
+    ) {
       peers[socket.id].available = available;
 
       Object.keys(peers).forEach((peerSocketId) => {
         if (peers[peerSocketId].role === "user") {
           io.to(peerSocketId).emit(
             "peer-list",
-            Object.values(peers).filter((peer) => peer.role === "technician")
+            Object.values(peers).filter(
+              (peer) => peer.role === "technician" || peer.role === "agent"
+            )
           );
         }
-      });
-
-      Object.keys(peers).forEach((peerSocketId) => {
         if (peers[peerSocketId].role === "company") {
           io.to(peerSocketId).emit(
             "peer-list",
@@ -457,7 +467,20 @@ io.on("connection", (socket) => {
       if (peers[peerSocketId].role === "user") {
         io.to(peerSocketId).emit(
           "peer-list",
-          Object.values(peers).filter((peer) => peer.role === "technician")
+          Object.values(peers).filter(
+            (peer) => peer.role === "technician" || peer.role === "agent"
+          )
+        );
+      }
+      if (peers[peerSocketId].role === "company") {
+        io.to(peerSocketId).emit(
+          "peer-list",
+          Object.values(peers).filter(
+            (peer) =>
+              peer.role === "technician" &&
+              peer.companyId === peers[peerSocketId].socketId &&
+              peer.available
+          )
         );
       }
     });
